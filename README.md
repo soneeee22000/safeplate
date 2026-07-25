@@ -60,6 +60,53 @@ flowchart TD
 Everything except `lookup_product` runs on-device. The dashed path is not an error case bolted
 on afterwards — it is the behaviour the project is built around.
 
+## Who it's for
+
+```mermaid
+flowchart LR
+    C(["Customer<br/>allergy, other language"])
+    S(["Server<br/>30 seconds, no training"])
+    M(["Manager<br/>liable for the answer"])
+
+    U1["Ask: does this contain X?"]
+    U2["Scan the ingredient label"]
+    U3["Answer in the customer's language"]
+    U4["Printable safety card"]
+    U5["Review the decision log"]
+
+    C --> U1
+    S --> U2
+    S --> U3
+    C --> U4
+    M --> U5
+
+    U2 -. includes .-> U3
+    U3 -. includes .-> U4
+```
+
+**The server is the user; the customer and the manager are who it protects.** A server holding
+a jar has no allergen training, no time, and often no shared language with the person asking.
+Today the options are guess, refuse everything, or go find a chef. All three are bad — and the
+first is the one that sends people to hospital.
+
+SafePlate's job is not to be clever. It is to turn thirty seconds of guessing into a sourced
+answer, or an honest refusal that a manager can stand behind.
+
+## Why this matters commercially
+
+|                   |                                                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Who pays**      | Restaurant groups and hospitality franchises — the buyer is whoever signs off on food-safety compliance, not the kitchen                                    |
+| **Budget line**   | Food-safety training and compliance tooling, an existing line item                                                                                          |
+| **The wedge**     | Allergen declaration is legally mandated in the EU under Regulation (EU) No 1169/2011 — the 14 allergens are not optional, so the obligation already exists |
+| **Why on-device** | No per-query cost, no network dependency in a kitchen, no customer health data sent anywhere                                                                |
+| **Defensibility** | The moat is the verified allergen taxonomy and the refusal policy, not the model — anyone can call an LLM, few will build the part that says _no_           |
+
+**Stated honestly:** this is a hackathon prototype, not a validated product. Market size,
+willingness to pay, and per-restaurant liability exposure are **assumptions we have not
+tested** — no operator has been interviewed. The strongest evidence we have is that the legal
+obligation is real and the current alternative is a server guessing.
+
 ## Escalation is enforced by the loop, not by the model
 
 We measured this rather than assuming it. Given ingredients including `casein` and the
