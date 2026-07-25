@@ -1,2 +1,0 @@
-2026-07-21 11:17 | gemma4:e2b | Tuesday smoke test PASSED (gen + tool-calling, offline)
-gemma4:e2b    7fbdbf8f5e45    7.2 GB    2 minutes ago    
