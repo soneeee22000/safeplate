@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Séjour Pour Tous</title>
+    <style>
+      :root {
+        --bg: #f4f6fb;
+        --surface: #ffffff;
+        --text: #14213d;
+        --muted: #5b6580;
+        --primary: #1e4fd6;
+        --primary-weak: #e7edfd;
+        --accent: #b8860b;
+        --danger: #b4232c;
+        --danger-weak: #fbeaeb;
+        --border: #dfe3ec;
+        --radius: 14px;
+        --shadow:
+          0 1px 3px rgba(20, 33, 61, 0.08), 0 8px 24px rgba(20, 33, 61, 0.06);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        line-height: 1.5;
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 32px 20px 80px;
+      }
+      header h1 {
+        font-size: 30px;
+        margin: 0 0 4px;
+        letter-spacing: -0.02em;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 12px;
+        background: var(--primary-weak);
+        color: var(--primary);
+        font-weight: 600;
+        font-size: 13px;
+        padding: 6px 12px;
+        border-radius: 999px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 22px;
+        margin-top: 22px;
+      }
+      .drop {
+        display: block; /* it is a <label>: inline padding would overflow the card */
+        border: 2px dashed var(--border);
+        border-radius: var(--radius);
+        text-align: center;
+        padding: 40px 20px;
+        cursor: pointer;
+        transition: 0.15s;
+      }
+      .drop:hover,
+      .drop.over {
+        border-color: var(--primary);
+        background: var(--primary-weak);
+      }
+      .drop input {
+        display: none;
+      }
+      .btn {
+        min-height: 44px;
+        padding: 0 20px;
+        border: none;
+        border-radius: 10px;
+        background: var(--primary);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .hidden {
+        display: none;
+      }
+      .facts dt {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .facts dd {
+        margin: 0 0 12px;
+        font-weight: 600;
+      }
+      .langrow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .langrow select {
+        flex: 0 1 200px;
+        padding: 9px 10px;
+        font: inherit;
+        font-size: 16px;
+        color: var(--text);
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        min-height: 44px;
+      }
+      .langrow select:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+      .guardrail {
+        margin-top: 12px;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: var(--danger);
+        background: var(--danger-weak);
+        border-radius: 10px;
+      }
+      .guardrail ul {
+        margin: 6px 0 0;
+        padding-left: 18px;
+      }
+      .sliderrow {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      input[type="range"] {
+        flex: 1;
+        accent-color: var(--primary);
+        height: 6px;
+      }
+      .asof {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        font-size: 18px;
+        min-width: 96px;
+      }
+      .fee {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin: 6px 0 2px;
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--accent);
+      }
+      .fee small {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .rule {
+        padding: 12px 0;
+        border-top: 1px solid var(--border);
+      }
+      .rule .topic {
+        display: inline-block;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--primary);
+        font-weight: 700;
+      }
+      .rule a {
+        color: var(--muted);
+        font-size: 12px;
+        text-decoration: none;
+      }
+      .rule a:hover {
+        text-decoration: underline;
+      }
+      .guidance {
+        white-space: pre-wrap;
+      }
+      .deadline {
+        margin-top: 12px;
+        font-weight: 700;
+        color: var(--primary);
+      }
+      .refused {
+        background: var(--danger-weak);
+        border-color: var(--danger);
+      }
+      .refused .topic {
+        color: var(--danger);
+      }
+      .spin::after {
+        content: "";
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        margin-left: 8px;
+        border: 2px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: s 0.7s linear infinite;
+        vertical-align: -3px;
+      }
+      @keyframes s {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <h1>Séjour&nbsp;Pour&nbsp;Tous</h1>
+        <p>
+          Understand your French immigration paperwork — grounded, or it won't
+          guess.
+        </p>
+        <span class="badge"
+          >● Offline · your document never leaves this device</span
+        >
+      </header>
+
+      <div class="card" id="uploadCard">
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="image/*" />
+          <strong>Drop a document photo here</strong><br />
+          <span style="color: var(--muted)"
+            >or click to choose — récépissé, titre de séjour…</span
+          >
+        </label>
+        <p id="status" style="color: var(--muted); margin: 14px 0 0"></p>
+      </div>
+
+      <div class="card hidden" id="factsCard">
+        <span class="rule"><span class="topic">Document read</span></span>
+        <dl class="facts" id="facts"></dl>
+      </div>
+
+      <div class="card hidden" id="asofCard">
+        <span class="topic">Rules in force — drag the date</span>
+        <div class="sliderrow" style="margin: 14px 0 4px">
+          <input type="range" id="slider" min="0" max="59" value="41" />
+          <span class="asof" id="asof">2026-06</span>
+        </div>
+        <div class="fee hidden" id="feeBox">
+          <span id="feeVal"></span><small id="feeSrc"></small>
+        </div>
+        <div id="rules"></div>
+        <div class="langrow">
+          <label class="topic" for="lang">Explain in</label>
+          <select id="lang">
+            <option value="English">English</option>
+            <option value="French">Français</option>
+            <option value="Arabic">العربية</option>
+            <option value="Burmese">မြန်မာ</option>
+            <option value="Ukrainian">Українська</option>
+            <option value="Spanish">Español</option>
+          </select>
+        </div>
+        <button class="btn" id="explainBtn" style="margin-top: 14px">
+          Explain in plain language
+        </button>
+      </div>
+
+      <div class="card hidden" id="answerCard">
+        <span class="topic" id="answerTitle">Guidance</span>
+        <p class="guidance" id="guidance" style="margin: 10px 0 0"></p>
+        <div class="deadline hidden" id="deadline"></div>
+        <div class="guardrail hidden" id="guardrail"></div>
+        <div id="citations" style="margin-top: 14px"></div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let docId = null;
+
+      const asOfDate = (v) => {
+        const y = 2023 + Math.floor(v / 12),
+          m = (v % 12) + 1;
+        return `${y}-${String(m).padStart(2, "0")}`;
+      };
+
+      $("drop").addEventListener("dragover", (e) => {
+        e.preventDefault();
+        $("drop").classList.add("over");
+      });
+      $("drop").addEventListener("dragleave", () =>
+        $("drop").classList.remove("over"),
+      );
+      $("drop").addEventListener("drop", (e) => {
+        e.preventDefault();
+        $("drop").classList.remove("over");
+        if (e.dataTransfer.files[0]) analyze(e.dataTransfer.files[0]);
+      });
+      $("file").addEventListener("change", (e) => {
+        if (e.target.files[0]) analyze(e.target.files[0]);
+      });
+
+      async function analyze(file) {
+        $("status").textContent = "Reading the document…";
+        $("status").className = "spin";
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/analyze", { method: "POST", body: fd });
+        const data = await res.json();
+        $("status").className = "";
+        $("status").textContent = "";
+        docId = data.doc_id;
+        renderFacts(data.facts);
+        $("factsCard").classList.remove("hidden");
+        $("asofCard").classList.remove("hidden");
+        $("answerCard").classList.add("hidden");
+        loadRules();
+      }
+
+      function renderFacts(f) {
+        const rows = {
+          "Document type": f.document_type,
+          "Valid from": f.validity_from,
+          "Valid until": f.validity_to,
+          "Authorizes work":
+            f.authorizes_work === null ? "—" : f.authorizes_work ? "Yes" : "No",
+          Summary: f.summary,
+        };
+        $("facts").innerHTML = Object.entries(rows)
+          .map(([k, v]) => `<dt>${k}</dt><dd>${v ?? "—"}</dd>`)
+          .join("");
+      }
+
+      $("slider").addEventListener("input", () => {
+        $("asof").textContent = asOfDate($("slider").value);
+        loadRules();
+      });
+
+      async function loadRules() {
+        const as_of = asOfDate($("slider").value) + "-01";
+        const res = await fetch("/api/rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ doc_id: docId, as_of }),
+        });
+        const data = await res.json();
+        renderRules(data.rules);
+      }
+
+      function renderRules(rules) {
+        const fee = rules.find((r) => r.topic === "taxe");
+        if (fee) {
+          const euros = (fee.text.match(/\d+\s*€/) || ["?"])[0];
+          $("feeBox").classList.remove("hidden");
+          $("feeVal").textContent = "Fee: " + euros;
+          $("feeSrc").textContent = "source: " + fee.source_id;
+        } else {
+          $("feeBox").classList.add("hidden");
+        }
+        $("rules").innerHTML =
+          rules
+            .map(
+              (r) => `
+          <div class="rule">
+            <span class="topic">${r.topic}</span>
+            <div>${r.text}</div>
+            <a href="${r.source_url}" target="_blank">${r.source_id} — in force ${r.valid_from} → ${r.valid_to || "now"}</a>
+          </div>`,
+            )
+            .join("") ||
+          `<p style="color:var(--muted)">No rules in force on this date.</p>`;
+      }
+
+      $("explainBtn").addEventListener("click", async () => {
+        const as_of = asOfDate($("slider").value) + "-01";
+        $("explainBtn").disabled = true;
+        $("explainBtn").className = "btn spin";
+        const res = await fetch("/api/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ doc_id: docId, as_of, lang: $("lang").value }),
+        });
+        const data = await res.json();
+        $("explainBtn").disabled = false;
+        $("explainBtn").className = "btn";
+        renderAnswer(data);
+      });
+
+      function renderAnswer(a) {
+        $("answerCard").classList.remove("hidden");
+        $("answerCard").classList.toggle("refused", a.refused);
+        $("answerTitle").textContent = a.refused
+          ? "Not enough grounding — refusing"
+          : "Guidance";
+        $("guidance").textContent = a.guidance;
+        const rtl = $("lang").value === "Arabic";
+        $("guidance").setAttribute("dir", rtl ? "rtl" : "ltr");
+        renderGuardrail(a.redacted_claims || []);
+        if (a.deadline) {
+          $("deadline").classList.remove("hidden");
+          $("deadline").textContent = "⏱ " + a.deadline;
+        } else {
+          $("deadline").classList.add("hidden");
+        }
+        renderCitations(a);
+      }
+
+      // Visible proof the guardrail ran: anything the model asserted that no in-force rule
+      // supports is shown here as removed, never inside the answer.
+      function renderGuardrail(claims) {
+        const box = $("guardrail");
+        box.classList.toggle("hidden", claims.length === 0);
+        if (!claims.length) return;
+        box.innerHTML =
+          `<strong>Guardrail removed ${claims.length} ungrounded statement${
+            claims.length > 1 ? "s" : ""
+          }</strong><ul>` +
+          claims.map((c) => `<li>${escapeHtml(c)}</li>`).join("") +
+          `</ul>`;
+      }
+
+      const escapeHtml = (s) =>
+        s.replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+
+      function renderCitations(a) {
+        $("citations").innerHTML = (a.citations || [])
+          .map(
+            (c) => `
+          <div class="rule"><span class="topic">source</span>
+            <a href="${c.source_url}" target="_blank">${c.source_id} — ${c.valid_from} → ${c.valid_to || "now"}</a>
+          </div>`,
+          )
+          .join("");
+      }
+    </script>
+  </body>
+</html>

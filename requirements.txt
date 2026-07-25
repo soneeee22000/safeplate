@@ -1,0 +1,18 @@
+# Séjour Pour Tous — dependencies (all runtime is offline; these are prep-time installs)
+# Versions pinned to the resolved, working set (verified 2026-07-21).
+
+ollama==0.4.7            # local Gemma 4 client (generation, JSON output, tool-calling)
+pytesseract==0.3.13      # wrapper around local Tesseract OCR
+pillow==12.3.0           # image loading + synthetic sample generation
+
+# --- retrieval ---
+# (as-of store uses only the Python stdlib sqlite3 — no extra dependency)
+
+# --- UI + MCP (starlette 1.3.1 must satisfy both; fastapi>=0.139 does) ---
+fastapi==0.139.2         # demo UI backend
+uvicorn==0.51.0          # serve the UI
+python-multipart          # file upload handling for /api/analyze
+fastmcp==3.4.4           # expose the engine over MCP (Alien Intelligence hook)
+
+# --- dev ---
+pytest==9.1.1

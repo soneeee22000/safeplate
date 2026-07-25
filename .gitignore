@@ -1,0 +1,39 @@
+# --- Secrets / personal ---
+# Luma pass: contains an auth token and personal email in plaintext. Never commit.
+*.pkpass
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Private working notes + superseded work (team-shared repo) ---
+archive/
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# --- Large local assets ---
+# tessdata/ restored — OCR is core to SafePlate
+*.gguf
+*.bin
+*.safetensors
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- AI tool artifacts ---
+.claude/
+.sixth/
+.cursor/
+.aider*
