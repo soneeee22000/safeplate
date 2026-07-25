@@ -154,6 +154,147 @@ by the orchestrator, not chosen by the model — see
 **`ask_kitchen` is the step that makes this more than a label reader.** A clean label never
 clears a dish on its own, because cross-contact is not written on any label and never will be.
 
+## System layers
+
+Where each part runs, and what crosses a network boundary.
+
+```mermaid
+flowchart TB
+    subgraph Diner["Diner's screen — table or kiosk"]
+        ORDER["/order<br/>speak or type · 4 scripts"]
+    end
+
+    subgraph Staff["Staff device"]
+        VERIFY["/verify<br/>trace + kitchen prompt"]
+    end
+
+    subgraph Service["FastAPI orchestrator — local"]
+        LOOP["Agent loop<br/>forced escalation<br/>never returns 'safe' unearned"]
+        GUARD["Refusal guardrail<br/>checks the model's own prose"]
+    end
+
+    subgraph Device["On-device — nothing leaves the machine"]
+        GEMMA["Gemma 4 E2B via Ollama<br/>/v1 chat · input_audio · temp 0"]
+        OCR["Tesseract<br/>eng + fra · 0.4s"]
+        MENU["Symphony labels<br/>+ EU-14 table + synonyms<br/>DATA, not a prompt"]
+    end
+
+    subgraph Human["Not a system"]
+        CHEF["The kitchen"]
+    end
+
+    subgraph Ext["External"]
+        SERP["SerpApi<br/>manufacturer declarations<br/>cached to disk"]
+    end
+
+    ORDER -->|audio or text| LOOP
+    VERIFY -->|audio or text| LOOP
+    LOOP --> GEMMA
+    LOOP --> OCR
+    LOOP --> MENU
+    LOOP -->|FORCED| SERP
+    LOOP -->|FORCED · run blocks| CHEF
+    CHEF -->|answer| LOOP
+    LOOP --> GUARD
+    GUARD -->|verdict + evidence + trace| ORDER
+    GUARD -->|verdict + evidence + trace| VERIFY
+
+    GEMMA -.->|hears · plans · speaks| LOOP
+    MENU -.->|decides| LOOP
+
+    style MENU fill:#eef1f5,stroke:#2a4c99,color:#111
+    style CHEF fill:#e8e9f7,stroke:#1f3a93,color:#111
+    style GUARD fill:#f6e2e0,stroke:#a02f28,color:#111
+```
+
+**Only `lookup_product` crosses the internet.** The model, the OCR and every safety decision
+stay on the machine — no diner's health information is sent anywhere.
+
+## A run, as a sequence
+
+The vegan gnocchi case, exactly as the loop executes it.
+
+```mermaid
+sequenceDiagram
+    actor D as Diner
+    participant L as Orchestrator
+    participant G as Gemma 4 E2B
+    participant M as Symphony labels
+    participant W as SerpApi
+    actor K as Kitchen
+
+    D->>L: audio — "I have a tree nut allergy.<br/>Is the gnocchis pesto vegan safe?"
+    L->>G: understand_request(audio)
+    G-->>L: {dish, avoid:[tree nuts], language} — 25s
+
+    alt avoid is empty
+        Note over L: FORCED — a dish cannot be<br/>checked against nothing
+        L-->>D: needs_confirmation, ask again
+    end
+
+    L->>M: report(dish, avoid)
+    M-->>L: label_conflict — pignons de pin<br/>declared:false (not in bold)
+
+    alt packaged ingredient
+        Note over L: FORCED by the loop,<br/>not chosen by the model
+        L->>W: lookup_product(product)
+        W-->>L: statements[] or unavailable
+    end
+
+    alt nothing on the label, workshop line silent
+        Note over L: FORCED — run BLOCKS here
+        L->>K: is there ANY way X reaches this plate?
+        K-->>L: free text — risk beats clearance
+    end
+
+    L->>G: compose_reply(verdict, language)
+    G-->>L: prose
+
+    alt prose offers the refused dish
+        Note over L: guardrail discards it,<br/>assembles from facts, translates
+    end
+
+    L-->>D: DO NOT SERVE + the reason,<br/>in the diner's language
+```
+
+**Every `FORCED` note is this file's control flow, not the model's judgement.** That is the
+whole architecture in one word, repeated four times.
+
+## Verdict states
+
+There are three, and one of them is unreachable for most questions at Symphony.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Understanding
+    Understanding --> NeedsConfirmation: no dish named
+    Understanding --> NeedsConfirmation: no allergen understood
+    Understanding --> Checking: dish + allergen known
+
+    Checking --> DoNotServe: on the label
+    Checking --> NeedsConfirmation: workshop declares it
+    Checking --> AwaitingHuman: label silent
+
+    AwaitingHuman --> DoNotServe: risk confirmed
+    AwaitingHuman --> NeedsConfirmation: answer unclear
+    AwaitingHuman --> Verified: risk ruled out by a person
+
+    DoNotServe --> [*]
+    NeedsConfirmation --> [*]
+    Verified --> [*]
+
+    note right of Verified
+        Only reachable when a human
+        ruled the risk out. No label,
+        and no model, can reach it alone.
+    end note
+```
+
+Every Symphony label carries the same workshop declaration — gluten, celery, mustard,
+peanuts, fish, eggs, soya, milk, tree nuts, sesame. **For any of those ten, `Verified` is
+unreachable by construction.** That is not a limitation to design around; it is the
+manufacturer declining to guarantee, and the agent declining to guarantee on their behalf.
+
 ## Who it's for
 
 ```mermaid
