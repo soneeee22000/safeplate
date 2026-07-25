@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -162,6 +163,38 @@ def _parse_intent(raw: str) -> Intent:
     )
 
 
+#: Formats Ollama's `input_audio` accepts. Anything else is converted first —
+#: handing it webm does not error, it hangs until the request times out, which
+#: costs four minutes and looks like a dead model rather than a bad format.
+NATIVE_AUDIO_FORMATS = frozenset({"wav", "mp3"})
+
+CONVERT_TIMEOUT_SECONDS = 30
+
+
+def to_wav(audio: bytes, source_format: str) -> bytes:
+    """Transcode browser audio to 16 kHz mono WAV via ffmpeg.
+
+    Browsers record webm/opus or mp4/aac; neither reaches the model intact. Mono
+    at 16 kHz is what speech models want and keeps the base64 payload small.
+
+    Returns the input unchanged if ffmpeg is unavailable, so a machine without it
+    still fails with the model's own error rather than a missing-binary one.
+    """
+    if source_format in NATIVE_AUDIO_FORMATS:
+        return audio
+
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error",
+             "-f", source_format, "-i", "pipe:0",
+             "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"],
+            input=audio, capture_output=True, timeout=CONVERT_TIMEOUT_SECONDS, check=True,
+        )
+        return result.stdout
+    except (OSError, subprocess.SubprocessError):
+        return audio
+
+
 def understand_audio(audio: bytes, *, audio_format: str = "wav") -> Intent:
     """Transcribe spoken audio and extract the diner's request in one call.
 
@@ -175,6 +208,7 @@ def understand_audio(audio: bytes, *, audio_format: str = "wav") -> Intent:
     Raises:
         SpeechError: If Ollama is unreachable or the reply is not usable JSON.
     """
+    audio = to_wav(audio, audio_format.lower())
     encoded = base64.b64encode(audio).decode()
     reply = _post(
         {
@@ -190,7 +224,7 @@ def understand_audio(audio: bytes, *, audio_format: str = "wav") -> Intent:
                         {"type": "text", "text": "Transcribe and structure this request."},
                         {
                             "type": "input_audio",
-                            "input_audio": {"data": encoded, "format": audio_format},
+                            "input_audio": {"data": encoded, "format": "wav"},
                         },
                     ],
                 },
