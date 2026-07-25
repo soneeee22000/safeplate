@@ -47,7 +47,8 @@ export interface Trace {
   /** ISO code — Gemma composes `explanation` in this language. */
   diner_language: string;
   verdict: Verdict;
-  started_at: string;
+  /** Absent on live runs — the orchestrator reports elapsed time, not wall clock. */
+  started_at?: string;
   total_ms: number;
   steps: TraceStep[];
   evidence: Evidence[];

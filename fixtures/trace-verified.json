@@ -1,120 +1,129 @@
 {
-  "case_id": "SP-2026-0725-009",
-  "restaurant": "Le Comptoir du Marais",
-  "dish": "Soupe de lentilles corail",
-  "allergen": "gluten",
-  "diner_language": "uk",
+  "case_id": "SP-FALAFEL-EN",
+  "restaurant": "SafePlate demo service",
+  "dish": "Falafel plate",
+  "allergen": "sesame",
+  "diner_language": "en",
   "verdict": "verified",
-  "started_at": "2026-07-25T12:12:33+02:00",
-  "total_ms": 34600,
+  "total_ms": 48453,
   "steps": [
     {
       "n": 1,
-      "tool": "read_label",
-      "engine": "rule",
-      "title": "Read the label",
-      "reasoning": "A case cannot open without label text. OCR runs before the model is asked anything.",
+      "tool": "understand_request",
+      "engine": "gemma",
+      "title": "Gemma hears the diner",
+      "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
       "forced": false,
-      "args": { "image_path": "photos/bouillon-legumes-01.jpg" },
-      "result": {
-        "text": "INGRÉDIENTS: sel marin, légumes déshydratés 18% (carotte, oignon, poireau), amidon de maïs, curcuma, huile de tournesol.",
-        "confidence": 0.96,
-        "lang": "fra"
+      "args": {
+        "input": "text"
       },
-      "duration_ms": 910
+      "result": {
+        "utterance": "I cannot eat sesame. Is the falafel plate ok?",
+        "language": "en",
+        "dish": "falafel plate",
+        "avoid": [
+          "sesame"
+        ],
+        "request_type": "question"
+      },
+      "duration_ms": 23525,
+      "note": "Typed input — same extraction path."
     },
     {
       "n": 2,
-      "tool": "structure_ingredients",
-      "engine": "gemma",
-      "title": "Gemma reads the panel into a list",
-      "reasoning": "Gemma segments the French run-on line, drops the percentage annotation, and expands the parenthetical group into its own ingredients.",
+      "tool": "assess_dish",
+      "engine": "rule",
+      "title": "The dish table decides what can come out",
+      "reasoning": "Whether an ingredient is structural is data, not generation. A 5B model guessing at culinary structure is exactly what this avoids.",
       "forced": false,
       "args": {
-        "ocr_text": "INGRÉDIENTS: sel marin, légumes déshydratés 18% ..."
-      },
-      "result": {
-        "ingredients": [
-          "sel marin",
-          "carotte",
-          "oignon",
-          "poireau",
-          "amidon de maïs",
-          "curcuma",
-          "huile de tournesol"
+        "dish": "falafel plate",
+        "avoid": [
+          "sesame"
         ]
       },
-      "duration_ms": 23400,
-      "note": "First tool-calling turn — model cold."
+      "result": {
+        "outcome": "modifiable",
+        "blocking": [],
+        "adjustable": [
+          {
+            "ingredient": "tahini sauce",
+            "role": "substitutable",
+            "substitute": "serve with harissa instead"
+          }
+        ]
+      },
+      "duration_ms": 0
     },
     {
       "n": 3,
-      "tool": "match_allergens",
-      "engine": "rule",
-      "title": "EU-14 table decides",
-      "reasoning": "Every ingredient resolves against the table. 'amidon de maïs' is maize starch, not a gluten cereal — the synonym table draws that line, not the model.",
-      "forced": false,
+      "tool": "lookup_product",
+      "engine": "external",
+      "title": "SerpApi — what the manufacturer declares",
+      "reasoning": "'tahini sauce' arrives in a jar. What is actually in it is the manufacturer's declaration, not our table.",
+      "forced": true,
       "args": {
-        "ingredients": [
-          "sel marin",
-          "carotte",
-          "oignon",
-          "poireau",
-          "amidon de maïs",
-          "curcuma",
-          "huile de tournesol"
-        ]
+        "product": "tahini sauce"
       },
       "result": {
-        "matched": [],
-        "unresolved": [],
-        "queried_allergen_found": false
+        "statements": [],
+        "conflict": false,
+        "unavailable": "SERPAPI_KEY is not set and this query is not cached. Put the key in a .env file — see .env.example."
       },
-      "duration_ms": 9,
-      "note": "Nothing unresolved. No external lookup is forced."
+      "duration_ms": 0,
+      "forced_by": "a packaged ingredient matched the diner's request",
+      "note": "Lookup unavailable — treated as unconfirmed, never as safe."
     },
     {
       "n": 4,
       "tool": "ask_kitchen",
       "engine": "human",
-      "title": "Cross-contact still has to be asked",
-      "reasoning": "A clean label never clears a dish on its own. The kitchen question is forced on every case, including this one.",
+      "title": "The agent asks what no document can answer",
+      "reasoning": "Cross-contact is not written on any label and never will be. Before clearing anything, a human has to answer.",
       "forced": true,
-      "forced_by": "cross_contact unknown for queried allergen",
       "args": {
-        "question": "Is the lentil soup prepared with any shared equipment used for wheat products?"
+        "question": "Falafel plate: can you do it as — serve with harissa instead? And is there cross-contact with sesame? Note: deep fryer shared with breaded and peanut-crusted items."
       },
       "result": {
         "answered_by": "chef",
-        "answer": "Non — casserole dédiée, pas de pâtes ni de pain dans ce poste.",
-        "answer_en": "No — dedicated pot, no pasta or bread at that station."
+        "answer": "Yes - dedicated pan, no sesame at that station, clean utensils"
       },
-      "duration_ms": 8200
+      "duration_ms": 0,
+      "forced_by": "cross_contact unknown for the requested allergen"
     },
     {
       "n": 5,
-      "tool": "verdict",
-      "engine": "gemma",
-      "title": "Gemma composes the clearance in Ukrainian",
-      "reasoning": "Label clean, nothing unresolved, cross-contact ruled out by a human. Gemma states the result and what it rests on.",
+      "tool": "interpret_answer",
+      "engine": "rule",
+      "title": "The kitchen's answer decides it",
+      "reasoning": "A human said what the documents could not. The verdict follows from that answer, not from the model's impression of it.",
       "forced": false,
-      "args": { "verdict": "verified", "language": "uk" },
-      "result": { "verdict": "verified" },
-      "duration_ms": 8900
-    }
-  ],
-  "evidence": [
-    {
-      "source": "Product label — OCR, confidence 0.96",
-      "url": null,
-      "text": "sel marin, légumes déshydratés, amidon de maïs, curcuma, huile de tournesol"
+      "args": {
+        "answer": "Yes - dedicated pan, no sesame at that station, clean utensils"
+      },
+      "result": {
+        "verdict": "verified"
+      },
+      "duration_ms": 0
     },
     {
-      "source": "Kitchen — chef on duty",
-      "url": null,
-      "text": "Dedicated pot, no pasta or bread at that station."
+      "n": 6,
+      "tool": "compose_reply",
+      "engine": "gemma",
+      "title": "Gemma explains it in the diner's language (en)",
+      "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+      "forced": false,
+      "args": {
+        "verdict": "verified",
+        "language": "en"
+      },
+      "result": {
+        "verdict": "verified"
+      },
+      "duration_ms": 24927
     }
   ],
-  "explanation": "✓ Цю страву можна подавати.\n\nСуп із червоної сочевиці не містить глютену:\n\n1) На етикетці немає жодного злаку з глютеном — кукурудзяний крохмаль глютену не містить.\n2) Кухня підтвердила, що суп готують в окремій каструлі, без макаронів і хліба на цій станції.\n\nЯкщо склад страви зміниться, перевірку потрібно провести знову.",
-  "explanation_en": "✓ This dish can be served.\n\nThe red lentil soup contains no gluten:\n\n1) The label lists no gluten-containing cereal — maize starch does not contain gluten.\n2) The kitchen confirmed the soup is made in a dedicated pot, with no pasta or bread at that station.\n\nIf the dish's composition changes, it must be verified again."
+  "evidence": [],
+  "explanation": "The falafel plate can be served as requested. The kitchen prepares this dish on a dedicated pan, ensuring no sesame contamination. We can adjust the tahini sauce by serving it with harissa instead.",
+  "explanation_en": "The falafel plate can be served as requested. The kitchen prepares this dish on a dedicated pan, ensuring no sesame contamination. We can adjust the tahini sauce by serving it with harissa instead."
 }

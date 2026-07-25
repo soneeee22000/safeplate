@@ -7,7 +7,10 @@ import refusalCase from "@/data/trace-refusal.json";
 import verifiedCase from "@/data/trace-verified.json";
 import type { Trace } from "@/lib/trace";
 
-const CASES: Trace[] = [refusalCase as Trace, verifiedCase as Trace];
+const CASES: Trace[] = [
+  refusalCase as unknown as Trace,
+  verifiedCase as unknown as Trace,
+];
 
 export default function Home() {
   return (
