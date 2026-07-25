@@ -1,0 +1,212 @@
+"""The diner speaks; Gemma hears and works out what is actually being asked.
+
+Ollama's native `/api/chat` silently drops audio fields — it returns 200 and the
+model politely asks for the audio it never received. The OpenAI-compatible
+endpoint accepts `input_audio` content parts and does deliver them, so this
+module talks to that endpoint instead. Verified against gemma4:e2b on Ollama
+0.32.3: a spoken English request transcribed correctly in 10.1s.
+
+One call does transcription *and* intent extraction. Splitting them would mean
+two round trips through a 5B model and a lost opportunity: the model resolves
+"without the fish sauce" against the dish it just heard named, which a
+transcribe-then-parse pipeline has to rediscover.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from typing import Any
+
+from .config import GENERATION_TEMPERATURE, MODEL_NAME
+
+OPENAI_CHAT_URL = "http://127.0.0.1:11434/v1/chat/completions"
+REQUEST_TIMEOUT_SECONDS = 240
+
+SYSTEM_PROMPT = """\
+You are the intake step of a restaurant allergen agent. A diner is speaking, \
+possibly not in English.
+
+Return ONLY a JSON object, no prose, with exactly these keys:
+  "utterance"    - verbatim transcription, in the language spoken
+  "language"     - ISO 639-1 code of the language spoken
+  "dish"         - the dish named, lowercase English, or null
+  "avoid"        - array of ingredients or foods to avoid, lowercase English
+  "request_type" - one of: "modification", "question", "declaration"
+  "notes"        - anything else the kitchen should know, or null
+
+Rules:
+- "avoid" holds what the diner cannot or will not eat. Translate to English.
+- "modification" means they asked for the dish changed. "question" means they \
+asked whether something is present. "declaration" means they only stated a \
+restriction.
+- If you did not clearly hear a dish name, set "dish" to null. Do not guess.
+- Never invent an allergen that was not spoken.
+"""
+
+
+class SpeechError(RuntimeError):
+    """Raised when the audio could not be turned into a usable request."""
+
+
+@dataclass
+class Intent:
+    """What the diner asked for, as structured data the loop can act on."""
+
+    utterance: str
+    language: str
+    dish: str | None
+    avoid: list[str] = field(default_factory=list)
+    request_type: str = "question"
+    notes: str | None = None
+
+    @property
+    def actionable(self) -> bool:
+        """False when the agent lacks the two things it needs to check anything."""
+        return bool(self.dish) and bool(self.avoid)
+
+
+def _post(payload: dict[str, Any]) -> dict[str, Any]:
+    request = urllib.request.Request(
+        OPENAI_CHAT_URL,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        raise SpeechError(f"Ollama returned {error.code}: {error.read().decode()[:200]}") from error
+    except OSError as error:
+        raise SpeechError(f"Ollama unreachable at {OPENAI_CHAT_URL}: {error}") from error
+
+
+def _content(reply: dict[str, Any]) -> str:
+    try:
+        return reply["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError) as error:
+        raise SpeechError(f"unexpected response shape: {reply}") from error
+
+
+def _close_unterminated(text: str) -> str:
+    """Append the closers a truncated JSON object is missing.
+
+    E2B reliably drops the final brace before its closing code fence — it emits
+    `"notes": null` and stops. The content is complete; only the punctuation is
+    not, so repairing it beats discarding a good answer.
+    """
+    depth_curly = depth_square = 0
+    in_string = escaped = False
+
+    for character in text:
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
+        if character == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if character == "{":
+            depth_curly += 1
+        elif character == "}":
+            depth_curly -= 1
+        elif character == "[":
+            depth_square += 1
+        elif character == "]":
+            depth_square -= 1
+
+    return text + ("]" * max(0, depth_square)) + ("}" * max(0, depth_curly))
+
+
+def _parse_intent(raw: str) -> Intent:
+    """Pull the JSON object out of the reply, tolerating fenced or truncated output."""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1].removeprefix("json").strip()
+    text = text.removesuffix("```").strip()
+
+    start = text.find("{")
+    if start == -1:
+        raise SpeechError(f"no JSON object in reply: {raw[:200]}")
+
+    candidate = _close_unterminated(text[start:].rstrip().rstrip(","))
+
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError as error:
+        raise SpeechError(f"malformed JSON from model: {candidate[:200]}") from error
+
+    avoid = data.get("avoid") or []
+    if isinstance(avoid, str):
+        avoid = [avoid]
+
+    return Intent(
+        utterance=str(data.get("utterance") or "").strip(),
+        language=str(data.get("language") or "en").strip().lower()[:5],
+        dish=(str(data["dish"]).strip().lower() if data.get("dish") else None),
+        avoid=[str(item).strip().lower() for item in avoid if str(item).strip()],
+        request_type=str(data.get("request_type") or "question").strip().lower(),
+        notes=(str(data["notes"]).strip() if data.get("notes") else None),
+    )
+
+
+def understand_audio(audio: bytes, *, audio_format: str = "wav") -> Intent:
+    """Transcribe spoken audio and extract the diner's request in one call.
+
+    Args:
+        audio: Raw audio bytes as captured from the diner.
+        audio_format: Container format, e.g. ``wav`` or ``mp3``.
+
+    Returns:
+        The structured request.
+
+    Raises:
+        SpeechError: If Ollama is unreachable or the reply is not usable JSON.
+    """
+    encoded = base64.b64encode(audio).decode()
+    reply = _post(
+        {
+            "model": MODEL_NAME,
+            "temperature": GENERATION_TEMPERATURE,
+            "stream": False,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Transcribe and structure this request."},
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": encoded, "format": audio_format},
+                        },
+                    ],
+                },
+            ],
+        }
+    )
+    return _parse_intent(_content(reply))
+
+
+def understand_text(utterance: str) -> Intent:
+    """Same extraction for typed input, so the agent works without a microphone."""
+    reply = _post(
+        {
+            "model": MODEL_NAME,
+            "temperature": GENERATION_TEMPERATURE,
+            "stream": False,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": utterance},
+            ],
+        }
+    )
+    return _parse_intent(_content(reply))
