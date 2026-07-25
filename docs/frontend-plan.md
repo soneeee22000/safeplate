@@ -1,5 +1,27 @@
 # SafePlate — frontend build plan
 
+## SHIPPED — verified 16:14, 2026-07-25
+
+| What                 | URL                                       | Status                    |
+| -------------------- | ----------------------------------------- | ------------------------- |
+| **Landing + team**   | `https://safeplate-ten.vercel.app`        | **200, public, verified** |
+| **Operator console** | `https://safeplate-ten.vercel.app/verify` | **200, public, verified** |
+| Repo                 | `https://github.com/RitaTY/gemma4`        | committed, not yet pushed |
+
+> ⚠️ **Do not link `safeplate.vercel.app`.** It returns 200 but belongs to an unrelated
+> "Secure License Plate Recycling & Pickup Service". Same trap as `assay.vercel.app`.
+>
+> ⚠️ **Do not link the per-deployment URLs** (`safeplate-<hash>-sones-projects-*.vercel.app`).
+> They sit behind Vercel Deployment Protection and serve a Vercel login page — which would be
+> **auto-ineligible** under the rules' "no login or paywall" clause. Only the production alias
+> above is public.
+
+**Honest label for the deployed page:** _Interactive demo (recorded trace)_. It genuinely
+runs — you open a case, the trace prints, and the kitchen question waits for a real typed
+answer — but Gemma is not executing behind it. Never call it a live agent.
+
+---
+
 **Written 2026-07-25 13:45 · Deadline 18:00 GMT+2 · ~4h15m remaining**
 Companion to `safeplate-mvp-decision.md`. Read that first for scope.
 
