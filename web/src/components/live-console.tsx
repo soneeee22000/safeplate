@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CaseForm } from "@/components/case-form";
+import { RequestForm } from "@/components/request-form";
 import { TicketLine } from "@/components/evidence-ticket";
 import recordedCase from "@/data/trace-refusal.json";
 import {
@@ -182,7 +182,7 @@ export function LiveConsole() {
     <div className="grid gap-8 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
       <div className="space-y-4 lg:sticky lg:top-24">
         <ModeBanner live={liveBackend} />
-        <CaseForm
+        <RequestForm
           onSubmit={startCase}
           disabled={busy}
           liveBackend={liveBackend}
@@ -245,7 +245,7 @@ function ModeBanner({ live }: { live: boolean }) {
       }`}
     >
       {live
-        ? "Live — Gemma 4 E2B, Tesseract and SerpApi on this machine."
+        ? "Live — Gemma 4 E2B is hearing and reasoning on this machine."
         : "Demo mode — replaying a recorded case. The kitchen question is still yours to answer."}
     </p>
   );
@@ -255,9 +255,9 @@ function EmptyState() {
   return (
     <div className="border-console-line flex min-h-80 items-center justify-center border border-dashed p-10">
       <p className="text-muted-foreground max-w-sm text-center text-sm leading-6">
-        Open a case to start. The agent reads the label, checks it against the
-        EU-14 table, searches the manufacturer&apos;s declaration, and asks the
-        kitchen what no label can tell it.
+        Say what the diner asked, in any language. Gemma works out the dish
+        and the restriction, the table decides what can honestly come out, and
+        the kitchen answers what no document can.
       </p>
     </div>
   );

@@ -35,8 +35,16 @@ Rules:
 #: because the model demonstrably writes them anyway.
 OFFER_PATTERNS = (
     "we can offer", "we can make", "we can prepare", "we can serve",
+    "i can offer", "i can make", "i can prepare", "i can serve",
+    "we could", "i could", "we can do", "we can omit", "i can omit",
     "can be made without", "can be prepared without", "instead we can",
-    "without any added", "without the added", "we could make", "we can do",
+    "without any added", "without the added", "happy to make", "able to make",
+)
+
+#: Offers of a *different* dish are legitimate after a refusal, so they survive.
+ALTERNATIVE_PHRASES = (
+    "different dish", "another dish", "something else", "alternative dish",
+    "other options", "from the menu",
 )
 
 VERDICT_OPENERS = {
@@ -62,6 +70,15 @@ def _facts(run: "Run") -> str:
         for finding in assessment.blocking:
             lines.append(
                 f"CANNOT REMOVE {finding.ingredient.name}: {finding.ingredient.why}"
+            )
+            # Stated as a forbidden sentence rather than a policy: the model kept
+            # writing the offer when the instruction lived only in the system
+            # prompt, and this is the last place it reads before writing.
+            lines.append(
+                f"THEREFORE: the answer is NO. Do NOT write that we can make, offer, "
+                f"prepare or serve the {assessment.dish.name} without the "
+                f"{finding.ingredient.name}, or with less of it, or with it on the "
+                f"side. It is impossible. Suggest a different dish from the menu."
             )
         for finding in assessment.adjustable:
             substitute = finding.ingredient.substitute or f"omit the {finding.ingredient.name}"
@@ -117,7 +134,12 @@ def contradicts_refusal(text: str, run: "Run") -> bool:
     #   cross-contact -> "We can omit the crushed peanuts from the dish if you like"
     # The second is subtler and just as dangerous: it implies the refusal lifts.
     lowered = text.lower()
-    return any(pattern in lowered for pattern in OFFER_PATTERNS)
+    if not any(pattern in lowered for pattern in OFFER_PATTERNS):
+        return False
+
+    # Offering a *different* dish is the right thing to do after a refusal.
+    # Only offers that leave the refused dish on the table are contradictions.
+    return not any(phrase in lowered for phrase in ALTERNATIVE_PHRASES)
 
 
 def compose_reply(run: "Run") -> tuple[str, str]:
@@ -131,19 +153,52 @@ def compose_reply(run: "Run") -> tuple[str, str]:
 
     try:
         english = _write(facts, "English")
+
+        # Composition contradicted the verdict. Fall back to text assembled from
+        # facts — then *translate* that rather than regenerating it. Translation
+        # is constrained: it cannot invent an offer the source does not contain,
+        # so the diner still gets their own language without the risk.
         if contradicts_refusal(english, run):
-            return _fallback(run), _fallback(run)
+            safe = _fallback(run)
+            if language.startswith("en"):
+                return safe, safe
+            translated = _translate(safe, language)
+            return (safe if contradicts_refusal(translated, run) else translated), safe
 
         if language.startswith("en"):
             return english, english
 
         original = _write(facts, language)
         if contradicts_refusal(original, run):
-            return _fallback(run), english
+            translated = _translate(english, language)
+            return (english if contradicts_refusal(translated, run) else translated), english
         return original, english
     except SpeechError:
         message = _fallback(run)
         return message, message
+
+
+def _translate(text: str, language: str) -> str:
+    """Render an already-safe message in the diner's language, and nothing more."""
+    reply = _post(
+        {
+            "model": MODEL_NAME,
+            "temperature": GENERATION_TEMPERATURE,
+            "stream": False,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Translate the message exactly. Do not add, soften, remove or "
+                        "reinterpret anything. Do not add offers, greetings or "
+                        "apologies. Output only the translation."
+                    ),
+                },
+                {"role": "user", "content": f"Translate into {language}:\n\n{text}"},
+            ],
+        }
+    )
+    return _content(reply)
 
 
 def _fallback(run: "Run") -> str:

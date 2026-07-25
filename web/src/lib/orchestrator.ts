@@ -30,10 +30,10 @@ export interface RunState {
 }
 
 export interface CaseRequest {
-  allergen: string;
-  diner_language: string;
-  /** Omitted in demo mode, where a recorded label stands in for a photo. */
-  image?: File;
+  /** What the diner said, typed. */
+  text?: string;
+  /** What the diner said, recorded. Gemma transcribes and understands it. */
+  audio?: Blob;
 }
 
 /** The EU 14 declarable allergens — Regulation (EU) No 1169/2011. */
@@ -63,11 +63,20 @@ export const DINER_LANGUAGES = [
   { code: "en", name: "English" },
 ] as const;
 
+/** Browsers record webm/ogg; the filename is how the orchestrator learns the format. */
+function audioFilename(blob: Blob): string {
+  if (blob.type.includes("ogg")) return "request.ogg";
+  if (blob.type.includes("mp4") || blob.type.includes("mp4a"))
+    return "request.mp4";
+  if (blob.type.includes("wav")) return "request.wav";
+  return "request.webm";
+}
+
 async function postCase(request: CaseRequest): Promise<string> {
   const body = new FormData();
-  body.set("allergen", request.allergen);
-  body.set("diner_language", request.diner_language);
-  if (request.image) body.set("image", request.image);
+  if (request.text) body.set("text", request.text);
+  if (request.audio)
+    body.set("audio", request.audio, audioFilename(request.audio));
 
   const response = await fetch(`${ORCHESTRATOR_URL}/api/case`, {
     method: "POST",
