@@ -128,8 +128,8 @@ flowchart LR
     Customer --> UC4
     Manager --> UC5
 
-    UC2 -.includes.-> UC3
-    UC3 -.includes.-> UC4
+    UC2 -. includes .-> UC3
+    UC3 -. includes .-> UC4
 ```
 
 **Primary flow:** a customer asks about an allergen in a language the server doesn't speak.
