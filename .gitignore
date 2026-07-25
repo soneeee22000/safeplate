@@ -37,3 +37,9 @@ Thumbs.db
 .sixth/
 .cursor/
 .aider*
+
+# hackathon working files, not part of the product
+*.pdf
+stitch_ref/
+stitch_safeplate*.zip
+image.png
