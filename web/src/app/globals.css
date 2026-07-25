@@ -1,0 +1,185 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   SafePlate design tokens
+
+   The page is a dark operator console framing a light paper ticket. That
+   contrast is the design: the machine is dark, the thing a human carries to the
+   kitchen is paper. Three inks print on that paper — black for deterministic
+   rules, ribbon blue for Gemma, pen blue for the human who answered.
+   --------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-console: var(--console);
+  --color-console-raised: var(--console-raised);
+  --color-console-line: var(--console-line);
+  --color-paper: var(--paper);
+  --color-paper-shade: var(--paper-shade);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-gemma: var(--gemma);
+  --color-gemma-lit: var(--gemma-lit);
+  --color-pen: var(--pen);
+  --color-pen-lit: var(--pen-lit);
+  --color-confirm-lit: var(--confirm-lit);
+  --color-verified: var(--verified);
+  --color-confirm: var(--confirm);
+  --color-refuse: var(--refuse);
+
+  --font-sans: var(--font-public-sans);
+  --font-display: var(--font-bricolage);
+  --font-mono: var(--font-plex-mono);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  /* Console — warm/olive-shifted near-black, deliberately not blue-black */
+  --console: #10100e;
+  --console-raised: #1a1a17;
+  --console-line: #2a2a25;
+
+  /* Ticket — receipt stock, never pure white */
+  --paper: #f2ede3;
+  --paper-shade: #e4ddcf;
+
+  /* Inks */
+  --ink: #16150f;
+  --ink-muted: #6b675c;
+  --gemma: #2b4c8c;
+  --pen: #1f3a93;
+
+  /* The same three inks, lifted for legibility on the dark console. Ribbon
+     colours chosen for paper go muddy against near-black. */
+  --gemma-lit: #8aa9e6;
+  --pen-lit: #94a9ec;
+  --confirm-lit: #e0a055;
+
+  /* Verdicts — functional status, not decoration */
+  --verified: #2e7d5b;
+  --confirm: #c87a28;
+  --refuse: #b02a20;
+
+  --background: var(--console);
+  --foreground: var(--paper);
+
+  --card: var(--console-raised);
+  --card-foreground: var(--paper);
+  --popover: var(--console-raised);
+  --popover-foreground: var(--paper);
+  --primary: var(--paper);
+  --primary-foreground: var(--console);
+  --secondary: var(--console-raised);
+  --secondary-foreground: var(--paper);
+  --muted: var(--console-raised);
+  --muted-foreground: #8f8b80;
+  --accent: var(--console-raised);
+  --accent-foreground: var(--paper);
+  --destructive: var(--refuse);
+  --border: var(--console-line);
+  --input: var(--console-line);
+  --ring: #55524a;
+  --radius: 0.25rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-console text-foreground;
+    font-family: var(--font-sans), system-ui, sans-serif;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* --- Ticket paper ---------------------------------------------------------- */
+
+/* Perforated top and bottom edge, drawn rather than imaged. */
+.ticket-edge {
+  --tooth: 11px;
+  height: var(--tooth);
+  background: radial-gradient(
+      circle at var(--tooth) 100%,
+      transparent 0,
+      transparent calc(var(--tooth) - 1px),
+      var(--paper) var(--tooth)
+    )
+    0 0 / calc(var(--tooth) * 2) 100% repeat-x;
+}
+.ticket-edge-bottom {
+  transform: scaleY(-1);
+}
+
+/* --- Print sequence -------------------------------------------------------- */
+
+@keyframes ticket-feed {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.printing {
+  animation: ticket-feed 320ms cubic-bezier(0.22, 0.68, 0.36, 1) both;
+}
+
+@keyframes stamp-in {
+  from {
+    opacity: 0;
+    transform: scale(1.35) rotate(-7deg);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-3.5deg);
+  }
+}
+
+.stamping {
+  animation: stamp-in 420ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .printing,
+  .stamping {
+    animation: none;
+  }
+}

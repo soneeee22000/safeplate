@@ -1,0 +1,120 @@
+{
+  "case_id": "SP-2026-0725-009",
+  "restaurant": "Le Comptoir du Marais",
+  "dish": "Soupe de lentilles corail",
+  "allergen": "gluten",
+  "diner_language": "uk",
+  "verdict": "verified",
+  "started_at": "2026-07-25T12:12:33+02:00",
+  "total_ms": 34600,
+  "steps": [
+    {
+      "n": 1,
+      "tool": "read_label",
+      "engine": "rule",
+      "title": "Read the label",
+      "reasoning": "A case cannot open without label text. OCR runs before the model is asked anything.",
+      "forced": false,
+      "args": { "image_path": "photos/bouillon-legumes-01.jpg" },
+      "result": {
+        "text": "INGRÉDIENTS: sel marin, légumes déshydratés 18% (carotte, oignon, poireau), amidon de maïs, curcuma, huile de tournesol.",
+        "confidence": 0.96,
+        "lang": "fra"
+      },
+      "duration_ms": 910
+    },
+    {
+      "n": 2,
+      "tool": "structure_ingredients",
+      "engine": "gemma",
+      "title": "Gemma reads the panel into a list",
+      "reasoning": "Gemma segments the French run-on line, drops the percentage annotation, and expands the parenthetical group into its own ingredients.",
+      "forced": false,
+      "args": {
+        "ocr_text": "INGRÉDIENTS: sel marin, légumes déshydratés 18% ..."
+      },
+      "result": {
+        "ingredients": [
+          "sel marin",
+          "carotte",
+          "oignon",
+          "poireau",
+          "amidon de maïs",
+          "curcuma",
+          "huile de tournesol"
+        ]
+      },
+      "duration_ms": 23400,
+      "note": "First tool-calling turn — model cold."
+    },
+    {
+      "n": 3,
+      "tool": "match_allergens",
+      "engine": "rule",
+      "title": "EU-14 table decides",
+      "reasoning": "Every ingredient resolves against the table. 'amidon de maïs' is maize starch, not a gluten cereal — the synonym table draws that line, not the model.",
+      "forced": false,
+      "args": {
+        "ingredients": [
+          "sel marin",
+          "carotte",
+          "oignon",
+          "poireau",
+          "amidon de maïs",
+          "curcuma",
+          "huile de tournesol"
+        ]
+      },
+      "result": {
+        "matched": [],
+        "unresolved": [],
+        "queried_allergen_found": false
+      },
+      "duration_ms": 9,
+      "note": "Nothing unresolved. No external lookup is forced."
+    },
+    {
+      "n": 4,
+      "tool": "ask_kitchen",
+      "engine": "human",
+      "title": "Cross-contact still has to be asked",
+      "reasoning": "A clean label never clears a dish on its own. The kitchen question is forced on every case, including this one.",
+      "forced": true,
+      "forced_by": "cross_contact unknown for queried allergen",
+      "args": {
+        "question": "Is the lentil soup prepared with any shared equipment used for wheat products?"
+      },
+      "result": {
+        "answered_by": "chef",
+        "answer": "Non — casserole dédiée, pas de pâtes ni de pain dans ce poste.",
+        "answer_en": "No — dedicated pot, no pasta or bread at that station."
+      },
+      "duration_ms": 8200
+    },
+    {
+      "n": 5,
+      "tool": "verdict",
+      "engine": "gemma",
+      "title": "Gemma composes the clearance in Ukrainian",
+      "reasoning": "Label clean, nothing unresolved, cross-contact ruled out by a human. Gemma states the result and what it rests on.",
+      "forced": false,
+      "args": { "verdict": "verified", "language": "uk" },
+      "result": { "verdict": "verified" },
+      "duration_ms": 8900
+    }
+  ],
+  "evidence": [
+    {
+      "source": "Product label — OCR, confidence 0.96",
+      "url": null,
+      "text": "sel marin, légumes déshydratés, amidon de maïs, curcuma, huile de tournesol"
+    },
+    {
+      "source": "Kitchen — chef on duty",
+      "url": null,
+      "text": "Dedicated pot, no pasta or bread at that station."
+    }
+  ],
+  "explanation": "✓ Цю страву можна подавати.\n\nСуп із червоної сочевиці не містить глютену:\n\n1) На етикетці немає жодного злаку з глютеном — кукурудзяний крохмаль глютену не містить.\n2) Кухня підтвердила, що суп готують в окремій каструлі, без макаронів і хліба на цій станції.\n\nЯкщо склад страви зміниться, перевірку потрібно провести знову.",
+  "explanation_en": "✓ This dish can be served.\n\nThe red lentil soup contains no gluten:\n\n1) The label lists no gluten-containing cereal — maize starch does not contain gluten.\n2) The kitchen confirmed the soup is made in a dedicated pot, with no pasta or bread at that station.\n\nIf the dish's composition changes, it must be verified again."
+}

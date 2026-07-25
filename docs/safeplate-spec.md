@@ -3,7 +3,8 @@
 **Gemma 4 Hackathon | Paris · Track 2 — Autonomous Agents · 25 July 2026**
 Team: Rita (product/frontend) · Afaq (data/backend) · Yan (agent loop/MCP) · Pyae (Gemma/eval)
 
-> **This file is the handoff document.** If the session resets, start here.
+> **This file is the technical handoff — schemas, gate results, stack.**
+> **For scope, persona and timing, `safeplate-mvp-decision.md` overrides §4 and §10 below.**
 
 ---
 
@@ -109,6 +110,10 @@ speaks — which is what rule §1.5 requires.
 ---
 
 ## 4. Use cases
+
+> ⚠️ **SUPERSEDED by `safeplate-mvp-decision.md` §1–§3.** The three-actor model below was cut at
+> 13:30: the **server is the only operator**, the chef answers one question on the server's screen,
+> and the manager review log and printable card are out of scope.
 
 ```mermaid
 flowchart LR
@@ -308,15 +313,9 @@ correct refusal, no false "safe".
 
 ## 10. Timeline
 
-| Time       | What                                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------------- |
-| now        | All four **join the Kaggle competition individually**, then form the team. Ask SerpApi for starter credits. |
-| +20 min    | Tool signatures frozen. Real labels photographed.                                                           |
-| → 15:30    | Build in parallel against the frozen schema.                                                                |
-| 15:30      | Integrate. One end-to-end run **including the failure path**.                                               |
-| 16:15      | Feature freeze. **Record the demo while it works.**                                                         |
-| 16:45      | Writeup ≤1,500 words · repo public with LICENSE · demo attached.                                            |
-| **~18:00** | **Submission closes — check the live countdown. Drafts are not judged.**                                    |
+> ⚠️ **SUPERSEDED by `safeplate-mvp-decision.md` §7.** Deadline confirmed on the Kaggle page at
+> 13:26 as **18:00 GMT+2**. Feature freeze moved to **16:30**. SerpApi starter credits are no
+> longer needed — the free plan's **250 searches/month** covers the build and the demo.
 
 ## 11. Submission checklist
 

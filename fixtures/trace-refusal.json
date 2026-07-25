@@ -1,0 +1,182 @@
+{
+  "case_id": "SP-2026-0725-014",
+  "restaurant": "Le Comptoir du Marais",
+  "dish": "Falafel plate, sauce blanche",
+  "allergen": "peanut",
+  "diner_language": "ar",
+  "verdict": "do_not_serve",
+  "started_at": "2026-07-25T12:41:08+02:00",
+  "total_ms": 58400,
+  "steps": [
+    {
+      "n": 1,
+      "tool": "read_label",
+      "engine": "rule",
+      "title": "Read the label",
+      "reasoning": "A case cannot open without label text. OCR runs before the model is asked anything.",
+      "forced": false,
+      "args": { "image_path": "photos/sauce-blanche-01.jpg" },
+      "result": {
+        "text": "INGRÉDIENTS: eau, huile de colza, ~~~ [illisible] ~~~ arômes",
+        "confidence": 0.41,
+        "lang": "fra"
+      },
+      "duration_ms": 900,
+      "note": "Glare across the ingredient panel. Confidence below the 0.75 floor."
+    },
+    {
+      "n": 2,
+      "tool": "read_label",
+      "engine": "rule",
+      "title": "Recovery — ask for a second photo",
+      "reasoning": "Confidence 0.41 is below threshold. The orchestrator refuses to reason over unreliable text and asks the server to re-shoot without glare.",
+      "forced": true,
+      "forced_by": "confidence < 0.75",
+      "args": { "image_path": "photos/sauce-blanche-02.jpg" },
+      "result": {
+        "text": "INGRÉDIENTS: eau, huile de colza, jaune d'œuf, vinaigre, moutarde de Dijon, sésamoïde, arômes naturels, conservateur E202.",
+        "confidence": 0.93,
+        "lang": "fra"
+      },
+      "duration_ms": 880
+    },
+    {
+      "n": 3,
+      "tool": "structure_ingredients",
+      "engine": "gemma",
+      "title": "Gemma reads the panel into a list",
+      "reasoning": "The OCR string is one run-on French line with abbreviations and an E-number. Gemma segments it into discrete ingredients and normalises each one.",
+      "forced": false,
+      "args": {
+        "ocr_text": "INGRÉDIENTS: eau, huile de colza, jaune d'œuf, ..."
+      },
+      "result": {
+        "ingredients": [
+          "eau",
+          "huile de colza",
+          "jaune d'œuf",
+          "vinaigre",
+          "moutarde de Dijon",
+          "sésamoïde",
+          "arômes naturels",
+          "E202"
+        ]
+      },
+      "duration_ms": 24000,
+      "note": "First tool-calling turn — model cold, tool schemas in context."
+    },
+    {
+      "n": 4,
+      "tool": "match_allergens",
+      "engine": "rule",
+      "title": "EU-14 table decides",
+      "reasoning": "The safety call is made against Regulation (EU) No 1169/2011, not by the model. Synonyms resolve deterministically.",
+      "forced": false,
+      "args": {
+        "ingredients": [
+          "eau",
+          "huile de colza",
+          "jaune d'œuf",
+          "vinaigre",
+          "moutarde de Dijon",
+          "sésamoïde",
+          "arômes naturels",
+          "E202"
+        ]
+      },
+      "result": {
+        "matched": [
+          { "ingredient": "jaune d'œuf", "allergen": "eggs", "via": "synonym" },
+          {
+            "ingredient": "moutarde de Dijon",
+            "allergen": "mustard",
+            "via": "synonym"
+          },
+          { "ingredient": "sésamoïde", "allergen": "sesame", "via": "synonym" }
+        ],
+        "unresolved": ["arômes naturels"],
+        "queried_allergen_found": false
+      },
+      "duration_ms": 12,
+      "note": "No peanut on the label. A label reader would stop here and say safe."
+    },
+    {
+      "n": 5,
+      "tool": "lookup_product",
+      "engine": "external",
+      "title": "SerpApi — manufacturer declaration",
+      "reasoning": "'arômes naturels' is an opaque token that can legally conceal a declarable allergen. The orchestrator forces an external lookup rather than letting the model decide it is probably fine.",
+      "forced": true,
+      "forced_by": "result.unresolved is non-empty",
+      "args": {
+        "brand": "Maison Théry",
+        "product": "Sauce blanche 450g",
+        "query": "Maison Théry sauce blanche allergènes ingrédients"
+      },
+      "result": {
+        "statements": [
+          {
+            "source": "maison-thery.fr",
+            "url": "https://maison-thery.fr/produits/sauce-blanche-450g",
+            "text": "Allergènes : œuf, moutarde, sésame.",
+            "declares": ["eggs", "mustard", "sesame"]
+          },
+          {
+            "source": "carrefour.fr",
+            "url": "https://www.carrefour.fr/p/sauce-blanche-maison-thery",
+            "text": "Peut contenir des traces d'arachide et de fruits à coque.",
+            "declares": ["peanut", "nuts"]
+          }
+        ],
+        "conflict": true
+      },
+      "duration_ms": 1840,
+      "note": "The two sources disagree on peanut. The manufacturer omits it; the retailer declares a trace risk."
+    },
+    {
+      "n": 6,
+      "tool": "ask_kitchen",
+      "engine": "human",
+      "title": "The agent asks a question no document can answer",
+      "reasoning": "Cross-contact is not on any label. Before refusing or clearing, the orchestrator requires a human answer from the kitchen.",
+      "forced": true,
+      "forced_by": "cross_contact unknown for queried allergen",
+      "args": {
+        "question": "Is the falafel fried in oil shared with any peanut-containing item?"
+      },
+      "result": {
+        "answered_by": "chef",
+        "answer": "Oui — même friteuse que le poulet pané aux cacahuètes.",
+        "answer_en": "Yes — same fryer as the peanut-crusted chicken."
+      },
+      "duration_ms": 21000,
+      "note": "21 seconds of that is a human walking to the pass. The agent waits."
+    },
+    {
+      "n": 7,
+      "tool": "escalate",
+      "engine": "gemma",
+      "title": "Gemma composes the refusal in Arabic",
+      "reasoning": "Two independent risks are confirmed. The verdict is fixed by the orchestrator; Gemma's job is to say it clearly in the diner's language and cite what it is based on.",
+      "forced": true,
+      "forced_by": "confirmed cross-contact + source conflict",
+      "args": { "verdict": "do_not_serve", "language": "ar" },
+      "result": { "verdict": "do_not_serve" },
+      "duration_ms": 9800
+    }
+  ],
+  "evidence": [
+    {
+      "source": "carrefour.fr",
+      "url": "https://www.carrefour.fr/p/sauce-blanche-maison-thery",
+      "text": "Peut contenir des traces d'arachide et de fruits à coque."
+    },
+    {
+      "source": "Kitchen — chef on duty",
+      "url": null,
+      "text": "Same fryer as the peanut-crusted chicken."
+    }
+  ],
+  "explanation": "⚠️ لا تقدّم هذا الطبق.\n\nلم نتمكّن من تأكيد خلو هذا الطبق من الفول السوداني، لسببين:\n\n١) صفحة بائع التجزئة تذكر أن الصلصة قد تحتوي على آثار الفول السوداني.\n٢) أكّد المطبخ أن الفلافل تُقلى في نفس الزيت المستخدم للدجاج المغطّى بالفول السوداني.\n\nملصق المنتج وحده لم يكن كافيًا — فهو لا يذكر الفول السوداني إطلاقًا.\n\nيسعدنا اقتراح أطباق بديلة آمنة.",
+  "explanation_en": "⚠️ Do not serve this dish.\n\nWe could not confirm this dish is free of peanuts, for two reasons:\n\n1) The retailer's page states the sauce may contain traces of peanut.\n2) The kitchen confirmed the falafel is fried in the same oil used for the peanut-crusted chicken.\n\nThe product label alone was not enough — it does not mention peanut at all.\n\nWe would be glad to suggest safe alternatives."
+}
