@@ -47,6 +47,17 @@ class SerpUnavailable(RuntimeError):
     """Raised when no key is configured and nothing is cached."""
 
 
+def api_keys() -> list[str]:
+    """Every configured SerpApi key, primary first.
+
+    A second key is supported because the free plan caps at 250 searches a month
+    and a demo is a bad moment to discover the cap. The fallback is only reached
+    when the first key is rejected or out of quota — never to double the budget.
+    """
+    names = ("SERPAPI_KEY", "SERPAPI_KEY_FALLBACK")
+    return [value for name in names if (value := os.environ.get(name, "").strip())]
+
+
 def _cache_path(query: str) -> Path:
     digest = hashlib.sha256(query.encode()).hexdigest()[:16]
     return CACHE_DIR / f"{digest}.json"
@@ -96,19 +107,31 @@ def lookup_product(product: str, *, brand: str = "") -> list[Statement]:
     if cached.exists():
         return [Statement(**item) for item in json.loads(cached.read_text(encoding="utf-8"))]
 
-    api_key = os.environ.get("SERPAPI_KEY", "").strip()
-    if not api_key:
+    keys = api_keys()
+    if not keys:
         raise SerpUnavailable(
-            "SERPAPI_KEY is not set and this query is not cached. "
+            "No SerpApi key is set and this query is not cached. "
             "Put the key in a .env file — see .env.example."
         )
 
-    url = f"{SERP_URL}?{urllib.parse.urlencode({'engine': 'google', 'q': query, 'num': RESULT_COUNT, 'api_key': api_key})}"
-    try:
-        with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            payload = json.loads(response.read())
-    except (urllib.error.URLError, OSError) as error:
-        raise SerpUnavailable(f"SerpApi unreachable: {error}") from error
+    payload, failures = None, []
+    for index, api_key in enumerate(keys):
+        url = f"{SERP_URL}?{urllib.parse.urlencode({'engine': 'google', 'q': query, 'num': RESULT_COUNT, 'api_key': api_key})}"
+        try:
+            with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                payload = json.loads(response.read())
+            break
+        except urllib.error.HTTPError as error:
+            # 401 is a bad key, 429 is the monthly quota. Both are worth falling
+            # through for; anything else is the query's fault, not the key's.
+            failures.append(f"key {index + 1}: HTTP {error.code}")
+            if error.code not in (401, 403, 429):
+                raise SerpUnavailable(f"SerpApi rejected the query: {error.code}") from error
+        except (urllib.error.URLError, OSError) as error:
+            failures.append(f"key {index + 1}: {error}")
+
+    if payload is None:
+        raise SerpUnavailable(f"every SerpApi key failed — {'; '.join(failures)}")
 
     statements = _extract(payload)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)

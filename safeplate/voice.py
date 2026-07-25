@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .config import GENERATION_TEMPERATURE, MODEL_NAME
+from .menu_symphony import VEGAN_MISREAD_WHY
 from .speech import SpeechError, _content, _post
 
 if TYPE_CHECKING:
@@ -85,6 +86,26 @@ def _facts(run: "Run") -> str:
             lines.append(f"Can adjust {finding.ingredient.name} — {substitute}")
     elif assessment and assessment.unknown_dish:
         lines.append("This dish is not in our verified list, so nothing can be confirmed.")
+
+    report = run.packaged_report
+    if report is not None:
+        lines.append(f"Dish: {report.dish.name} ({report.dish.weight_grams} g, sealed tray)")
+        for conflict in report.label_conflicts:
+            bold = "in the bold allergen text" if conflict.declared else (
+                "listed in the ingredients but NOT in bold, so easy to miss"
+            )
+            lines.append(
+                f"ON THE LABEL: {conflict.ingredient.name} ({conflict.ingredient.gloss}) — "
+                f"{bold}. {conflict.ingredient.why}"
+            )
+        for allergen in report.vegan_misreads:
+            lines.append(f"IMPORTANT: {VEGAN_MISREAD_WHY.get(allergen, '')}")
+        if report.shared_facility_matches:
+            lines.append(
+                f"The label says: {report.shared_facility.declaration_en} "
+                f"This covers {', '.join(report.shared_facility_matches)}, so the maker "
+                "does not guarantee its absence and neither do we."
+            )
 
     for statement in run.statements:
         lines.append(f"Source {statement.source}: {statement.text}")
@@ -208,6 +229,20 @@ def _fallback(run: "Run") -> str:
     Less graceful, and never wrong.
     """
     parts = [VERDICT_OPENERS.get(run.verdict or "", "Unresolved.")]
+    report = run.packaged_report
+    if report is not None:
+        for conflict in report.label_conflicts:
+            parts.append(
+                f"The label lists {conflict.ingredient.name} "
+                f"({conflict.ingredient.gloss})."
+            )
+            if not conflict.declared:
+                parts.append("It is not in the bold allergen text, which is why it is easy to miss.")
+        for allergen in report.vegan_misreads:
+            parts.append(VEGAN_MISREAD_WHY.get(allergen, ""))
+        if report.shared_facility_matches:
+            parts.append(report.shared_facility.declaration_en)
+        parts.append("Please speak to a member of staff before ordering.")
     if run.assessment:
         for finding in run.assessment.blocking:
             parts.append(finding.ingredient.why)

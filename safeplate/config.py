@@ -6,9 +6,32 @@ resolved relative to the project root so the package runs from anywhere.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parent.parent
+
+
+def _load_dotenv() -> None:
+    """Read `.env` into the environment, without adding a dependency.
+
+    Values already set in the real environment win, so a shell export still
+    overrides the file. Missing file is not an error — the SerpApi lookup
+    degrades to "unconfirmed", which is a safe state.
+    """
+    env_file = PROJECT_ROOT / ".env"
+    if not env_file.exists():
+        return
+
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        os.environ.setdefault(name.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
 
 # --- Model (offline via Ollama) ---
 MODEL_NAME: str = "gemma4:e2b"  # E4B OOMs on 16GB; E2B is the demo model

@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-from . import dishes, serp
+from . import dishes, menu_symphony, serp
 from .speech import Intent, SpeechError, understand_audio, understand_text
 from .voice import compose_reply
 
@@ -64,6 +64,7 @@ class Run:
     pending_question: str | None = None
     intent: Intent | None = None
     assessment: dishes.Assessment | None = None
+    packaged_report: menu_symphony.LabelReport | None = None
     statements: list[serp.Statement] = field(default_factory=list)
     kitchen_answer: str | None = None
     steps: list[Step] = field(default_factory=list)
@@ -80,6 +81,8 @@ class Run:
     def as_trace(self) -> dict[str, Any]:
         """The shape the interface renders — same schema as `fixtures/*.json`."""
         dish = self.assessment.dish if self.assessment else None
+        if self.packaged_report is not None:
+            dish = self.packaged_report.dish
         return {
             "case_id": self.run_id,
             "restaurant": "SafePlate demo service",
@@ -142,6 +145,14 @@ def begin(run: Run, *, audio: bytes | None = None, text: str | None = None,
             verdict="needs_confirmation",
         )
 
+    # Symphony.fr is the onboarded restaurant, so its real labels are consulted
+    # before the generic dish table. A sealed frozen tray is a different problem
+    # from a dish a chef assembles: nothing can be left out of it, and the
+    # workshop declaration on every label covers ten allergen classes at once.
+    packaged = menu_symphony.lookup(intent.dish)
+    if packaged is not None:
+        return _assess_packaged(run, packaged, intent)
+
     assessment, elapsed = _timed(lambda: dishes.assess(intent.dish, intent.avoid))
     run.assessment = assessment
     dish = assessment.dish
@@ -191,6 +202,88 @@ def begin(run: Run, *, audio: bytes | None = None, text: str | None = None,
         )
 
     return _ask_kitchen(run)
+
+
+def _assess_packaged(run: Run, dish: menu_symphony.PackagedDish, intent: Intent) -> Run:
+    """Decide a Symphony tray from its own label, and never above what it can prove.
+
+    The ceiling here is deliberate. Every Symphony label carries the same workshop
+    declaration — gluten, celery, mustard, peanuts, fish, eggs, soy, milk, nuts,
+    sesame — so for any of those ten the strongest honest verdict is
+    `needs_confirmation`. A `verified` is unreachable, by construction rather than
+    by the model's discretion.
+    """
+    report, elapsed = _timed(lambda: menu_symphony.report(dish, intent.avoid))
+    run.packaged_report = report
+
+    run.add(Step(
+        n=0, tool="read_label", engine="rule",
+        title=f"The label decides — {dish.name}",
+        reasoning="Symphony trays arrive sealed and reheated. What is in them is what the "
+                  "manufacturer printed, and nothing can be left out at the pass.",
+        args={"dish": dish.name, "avoid": intent.avoid},
+        result={
+            "outcome": report.outcome,
+            "label_conflicts": [
+                {"ingredient": item.ingredient.name, "declared_in_bold": item.declared}
+                for item in report.label_conflicts
+            ],
+            "shared_facility_matches": list(report.shared_facility_matches),
+            "vegan_misreads": list(report.vegan_misreads),
+        },
+        duration_ms=elapsed,
+        note=(menu_symphony.PINE_NUT_WHY if report.vegan_misreads else None),
+    ))
+
+    if report.label_conflicts:
+        undeclared = report.undeclared_conflicts
+        reason = (
+            "an ingredient the diner must avoid is on the label but not in the bold "
+            "allergen text" if undeclared else "the label declares it outright"
+        )
+        return _forced_escalate(
+            run, reason,
+            "The ingredient is in the tray. It cannot be removed from a sealed dish, so "
+            "the answer is no — and if the label never bolded it, the diner would not "
+            "have found it by reading carefully.",
+            verdict="do_not_serve",
+        )
+
+    if report.shared_facility_matches:
+        covered = ", ".join(report.shared_facility_matches)
+        return _forced_escalate(
+            run, f"workshop declaration covers {covered}",
+            "The label says this is made in a workshop that also handles this allergen. "
+            "That is the manufacturer declining to guarantee it, so we decline too.",
+            verdict="needs_confirmation",
+        )
+
+    return _ask_kitchen_packaged(run, dish, intent)
+
+
+def _ask_kitchen_packaged(run: Run, dish: menu_symphony.PackagedDish, intent: Intent) -> Run:
+    """Even outside the workshop declaration, a person confirms before anything clears."""
+    avoid = ", ".join(intent.avoid) or "the stated allergen"
+    # Phrased so "yes" always means risk, matching the other kitchen question.
+    # Two questions with opposite polarity cannot share one reading of the answer,
+    # and getting that backwards clears a dish that should be refused.
+    question = (
+        f"{dish.name}: the label does not list {avoid} and the workshop declaration does "
+        f"not cover it. Is there ANY way {avoid} could reach this plate in service?"
+    )
+
+    run.add(Step(
+        n=0, tool="ask_kitchen", engine="human",
+        title="The agent asks what no label can answer",
+        reasoning="The workshop line is silent on this allergen, which is not the same as "
+                  "the workshop promising its absence. A human confirms.",
+        forced=True, forced_by="label silent on the requested allergen",
+        args={"question": question}, result={},
+    ))
+
+    run.status = "awaiting_human"
+    run.pending_question = question
+    return run
 
 
 def _lookup(run: Run, product: str, avoid: str) -> None:
@@ -266,6 +359,41 @@ def _forced_escalate(run: Run, reason: str, explanation: str, *, verdict: str) -
     return run
 
 
+#: The kitchen confirming a risk exists. Every question is phrased "is there any
+#: way X could reach this plate", so these all mean do not serve.
+RISK_MARKERS = (
+    "yes", "oui", "shar", "same ", "partag", "même", "can't guarantee",
+    "cannot guarantee", "possible", "peut-être", "maybe", "not sure", "unsure",
+    "may contain", "peut contenir", "risk", "risque",
+)
+
+#: The kitchen ruling the risk out. Deliberately demanding: a bare "no" is here,
+#: but anything hedged is not, because ambiguity must not clear a dish.
+CLEARANCE_MARKERS = (
+    "no ", "no.", "non", "none", "aucun", "pas de", "dedicated", "separate",
+    "séparé", "dédié", "never", "jamais", "free of", "sealed", "no cross",
+)
+
+
+def _read_kitchen_answer(run: Run, answer: str) -> str:
+    """Turn the chef's free text into a verdict, erring towards refusal.
+
+    Risk beats clearance whenever both appear: "no shellfish, but shared oil" is
+    a refusal. Anything that matches neither stays `needs_confirmation`, because
+    an answer nobody understood is not an answer.
+    """
+    lowered = f" {answer.lower().strip()} "
+
+    risk = any(marker in lowered for marker in RISK_MARKERS)
+    cleared = any(marker in lowered for marker in CLEARANCE_MARKERS)
+
+    if risk:
+        return "do_not_serve"
+    if cleared and not (run.assessment and run.assessment.blocking):
+        return "verified"
+    return "needs_confirmation"
+
+
 def answer_kitchen(run: Run, answer: str) -> Run:
     """Fold the kitchen's answer in and finish the case."""
     if run.status != "awaiting_human":
@@ -278,22 +406,7 @@ def answer_kitchen(run: Run, answer: str) -> Run:
             step.result = {"answered_by": "chef", "answer": answer}
             break
 
-    # Gemma reads the chef's free-text reply; the loop decides what it means.
-    refused = any(
-        word in answer.lower()
-        for word in ("no", "non", "can't", "cannot", "shared", "same", "yes -", "yes,")
-    )
-    cleared = any(
-        word in answer.lower()
-        for word in ("dedicated", "separate", "clean", "no cross", "pas de", "aucun")
-    )
-
-    if cleared and not run.assessment.blocking:
-        run.verdict = "verified"
-    elif refused:
-        run.verdict = "do_not_serve"
-    else:
-        run.verdict = "needs_confirmation"
+    run.verdict = _read_kitchen_answer(run, answer)
 
     run.add(Step(
         n=0, tool="interpret_answer", engine="rule",

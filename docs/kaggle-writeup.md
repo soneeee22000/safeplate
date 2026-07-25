@@ -8,8 +8,13 @@
 
 ## The problem
 
-A diner says, in a language the waiter doesn't speak: _"I'm allergic to fish — can you
-make the pad thai without the fish sauce?"_
+A diner says, in a language the waiter doesn't speak: _"I'm allergic to nuts — is the vegan
+gnocchi okay?"_
+
+It is not. **Symphony.fr's "Gnocchis pesto vegan" contains pignons de pin — pine nuts.**
+Vegan describes animal products, not allergens; a diner avoiding nuts reads _vegan_ and
+relaxes. We did not invent that example. Symphony.fr catered this hackathon, and it is
+printed on the label of the lunch we were served.
 
 The waiter has thirty seconds, no allergen training, and a legal obligation not to guess.
 The usual answers are all bad. Guess, and someone ends up in an ambulance. Refuse
@@ -136,8 +141,13 @@ That last row is the point. **Every safety decision is sub-millisecond and deter
 The seconds are all spent on understanding and speaking — the two things a language model
 should be doing.
 
-Also measured and rejected: E2B's **vision** failed on dense printed ingredient panels
-(echoed the prompt, then emitted digits), so label reading uses Tesseract, not the model.
+**Vision, re-tested and still rejected.** Once the OpenAI-compatible endpoint fixed audio,
+we retried vision there too, on a real Symphony label. The image reached the model — it
+described the picture — but it called a photographed ingredient panel _"a placeholder
+graphic, not an actual food label"_ and read nothing. **Tesseract read the same photo in
+0.4 s**, correctly transcribing `pignons de pin` and the full shared-facility line. So the
+split is measured, not assumed: Gemma hears and speaks, Tesseract reads.
+
 `think: false` is load-bearing — E2B otherwise emits chain-of-thought into a field nobody
 reads, at roughly 3× the latency.
 

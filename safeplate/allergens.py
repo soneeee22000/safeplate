@@ -72,6 +72,47 @@ SYNONYMS: dict[str, str] = {
 }
 
 
+#: Words diners use that cover more than one declarable allergen. Deliberately
+#: generous: someone who says "nuts" may or may not mean peanuts too, and the
+#: safe reading of that ambiguity is the wider one. Erring wide costs a diner a
+#: dish; erring narrow costs them an ambulance.
+GROUPS: dict[str, tuple[str, ...]] = {
+    "nuts": ("nuts", "peanuts"),
+    "nut": ("nuts", "peanuts"),
+    "tree nut": ("nuts",),
+    "tree nuts": ("nuts",),
+    "treenuts": ("nuts",),
+    "fruits a coque": ("nuts",),
+    "fruits à coque": ("nuts",),
+    "fruit a coque": ("nuts",),
+    "shellfish": ("crustaceans", "molluscs"),
+    "seafood": ("fish", "crustaceans", "molluscs"),
+    "fruits de mer": ("crustaceans", "molluscs"),
+    "dairy": ("milk",),
+    "lactose": ("milk",),
+    "laitier": ("milk",),
+    "produits laitiers": ("milk",),
+    "gluten": ("cereals containing gluten",),
+    "wheat": ("cereals containing gluten",),
+    "sulfites": ("sulphites",),
+}
+
+
+def expand(term: str) -> tuple[str, ...]:
+    """Every declarable allergen a diner's word could mean.
+
+    Single-allergen terms come back as a one-tuple; broad words like "seafood"
+    come back as all the allergens they cover.
+    """
+    key = term.strip().lower()
+    if key in GROUPS:
+        return GROUPS[key]
+    for phrase, allergens in GROUPS.items():
+        if phrase in key:
+            return allergens
+    return (normalise(key),)
+
+
 def normalise(term: str) -> str:
     """Map an ingredient or spoken term to its declarable allergen, if any.
 
@@ -83,6 +124,10 @@ def normalise(term: str) -> str:
         return key
     if key in SYNONYMS:
         return SYNONYMS[key]
+    # Broad diner words resolve to their principal allergen here; callers that
+    # need every allergen a word covers should use `expand` instead.
+    if key in GROUPS:
+        return GROUPS[key][0]
     # "no fish sauce please" and "contains anchovy paste" both need substring reach.
     for synonym, allergen in SYNONYMS.items():
         if synonym in key:
@@ -92,8 +137,10 @@ def normalise(term: str) -> str:
 
 def conflicts(avoid: str, ingredient_allergens: list[str], ingredient_name: str) -> bool:
     """True when an ingredient is something the diner said to avoid."""
-    target = normalise(avoid)
-    if target in ingredient_allergens:
+    targets = expand(avoid)
+    if any(target in ingredient_allergens for target in targets):
         return True
     # Direct naming: the diner said "fish sauce" and this ingredient is fish sauce.
-    return normalise(ingredient_name) == target or avoid.strip().lower() in ingredient_name.lower()
+    if normalise(ingredient_name) in targets:
+        return True
+    return avoid.strip().lower() in ingredient_name.lower()
