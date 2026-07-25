@@ -98,6 +98,34 @@ Nothing else on this list matters if this is not done. **A draft is not judged.*
    - Demo: `https://safeplate-ten.vercel.app/order`
 7. **Submit** — top right. Confirm it no longer says "draft".
 
+## 3b. Record the demo (15 min) — do this while the orchestrator is up
+
+**Skip Remotion.** A plain screen recording of the real app is faster, more
+convincing, and explicitly allowed: _"an interactive terminal recording ... or a
+short demo video."_ Windows: `Win + Alt + R` (Game Bar) or OBS.
+
+The orchestrator is already running on port 8000. If it stopped:
+
+```bash
+.venv/Scripts/python -m uvicorn safeplate.api:app --host 127.0.0.1 --port 8000
+```
+
+Record `http://localhost:3000/order` (live mode, green banner) — **not** the Vercel
+URL, which replays. Two takes, ~90 seconds total:
+
+**Take 1 — the refusal that matters.** Tap _Gnocchis pesto vegan_. Type or say
+_"I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?"_ Let it run.
+While Gemma is thinking (~25 s), talk over it — say that the label is real, it was
+today's lunch, and pine nuts are in the ingredients but not in the bold allergen
+text. Land on the verdict.
+
+**Take 2 — it asks a human.** Tap _Paëlla_. Ask about shellfish. The label is
+silent and the workshop line does not cover it, so the agent stops and asks the
+kitchen. Type `Non - bac scellé en usine, aucun crustacé`. It clears.
+
+If the live run stalls, the recording still works from the Vercel replay — just
+never call that one live.
+
 ## 4. Optional, only if time remains
 
 Add your SerpApi key so the lookup step shows real evidence instead of
