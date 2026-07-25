@@ -252,7 +252,7 @@ function ToggleButton({
   );
 }
 
-function TicketLine({ step }: { step: TraceStep }) {
+export function TicketLine({ step }: { step: TraceStep }) {
   const engine = ENGINE_PRESENTATION[step.engine];
   const isHuman = step.engine === "human";
 
