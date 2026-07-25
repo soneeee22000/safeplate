@@ -35,18 +35,95 @@ Built for the **Gemma 4 Hackathon | Paris**, Track 2 (Autonomous Agents), 42 Par
 
 ## The design decision
 
-**Gemma 4 plans, reads, translates and chooses tools. A deterministic table decides whether an
-ingredient is an allergen.**
+**Gemma 4 hears, understands and speaks. Deterministic tables decide whether anyone can eat
+the food.**
 
-| Gemma 4 E2B owns                             | The lookup table owns                   |
-| -------------------------------------------- | --------------------------------------- |
-| Reading OCR text into structured ingredients | **Whether an ingredient is declarable** |
-| Translating staff to customer language       | `casein → milk`, `semolina → gluten`    |
-| Choosing the next tool                       |                                         |
-| Composing the explanation, or the refusal    |                                         |
+| Gemma 4 E2B owns                                | The tables own                                     |
+| ----------------------------------------------- | -------------------------------------------------- |
+| Hearing the diner — audio in, any language      | **Whether an ingredient is a declarable allergen** |
+| Turning that into `{dish, avoid, request_type}` | Whether it can be removed from the dish            |
+| Choosing which tool to call next                | `casein → milk`, `pignons de pin → nuts`           |
+| Saying the answer in the diner's own language   | Whether the verdict may ever be "safe"             |
 
 A language model is never the last line of defence. The reasoning is learned; the safety call
 is deterministic and auditable.
+
+---
+
+## One run, turn by turn
+
+This is a real trace, replayed from `fixtures/`. Nothing below is illustrative.
+
+> **Diner** — spoken, in French
+> _« Je suis allergique au poisson. Vous pouvez faire le pad thaï sans nuoc-mâm ? »_
+
+**Turn 1 · `understand_request` · GEMMA · 29.2 s**
+
+Audio goes straight into Gemma. One call transcribes _and_ extracts intent, so "without the
+nuoc-mâm" resolves against the dish it just heard named:
+
+```json
+{
+  "language": "fr",
+  "dish": "pad thai",
+  "avoid": ["fish", "nuoc-mam"],
+  "request_type": "modification"
+}
+```
+
+**Turn 2 · `assess_dish` · RULE · <1 ms**
+
+The model is not asked whether this is safe. A table is:
+
+```json
+{
+  "outcome": "cannot_modify",
+  "blocking": [{ "ingredient": "fish sauce", "role": "structural" }]
+}
+```
+
+**Turn 3 · `lookup_product` · SERPAPI · FORCED**
+
+Fish sauce arrives in a jar, so what is in it is the manufacturer's declaration, not our
+table. The orchestrator compels this call — the model would skip it.
+
+**Turn 4 · `escalate` · RULE · FORCED**
+
+`forced_by: structural ingredient cannot be removed`. There is no path from here to "safe".
+
+**Turn 5 · `compose_reply` · GEMMA · 57.4 s**
+
+The verdict was fixed before this ran. Gemma's only job is to say it clearly, in French:
+
+> _« Nous ne pouvons pas servir ceci comme demandé. La sauce de poisson est le sel et l'épine
+> dorsale du pad thaï… Nous pouvons suggérer autre chose du menu. »_
+
+**Five turns. Two by Gemma, two forced by the loop, one sub-millisecond table lookup that made
+the actual decision.**
+
+---
+
+## The turn that is not a turn
+
+Some questions have no document that answers them. Cross-contact is one:
+
+> **Agent → kitchen**
+> _"Falafel plate: can you do it as — serve with harissa instead? And is there cross-contact
+> with sesame? Note: deep fryer shared with breaded and peanut-crusted items."_
+>
+> **Chef** — typed on the same screen
+> _"Yes — dedicated pan, no sesame at that station, clean utensils."_
+>
+> **Agent → diner**
+> _"The falafel plate can be prepared without sesame. The kitchen uses a dedicated pan…"_
+
+The run **blocks** here. `status: awaiting_human`, and nothing is cleared until a person
+answers. Every question is phrased so **"yes" means risk** — two questions with opposite
+polarity cannot share one reading of the answer, and getting that backwards clears a dish
+that should be refused.
+
+Risk beats clearance whenever both appear. _"No shellfish in it but we share the oil"_ is a
+refusal.
 
 ## Architecture
 
@@ -134,12 +211,39 @@ the casein and stopped.
 So escalation is control flow, not a hope:
 
 ```python
-if result.unresolved:            # not "if the model decides to"
-    force_tool("lookup_product")
-
-if sources_conflict(evidence):
-    force_tool("escalate")       # refuse; never average conflicting sources
+if assessment.unknown_dish:   force("escalate")        # not "if the model decides to"
+if not intent.avoid:          force("escalate")        # nothing to check is not a pass
+if packaged_ingredient:       force("lookup_product")
+if assessment.blocking:       force("escalate")
+if clearable:                 force("ask_kitchen")     # always. a clean label clears nothing alone
 ```
+
+### Three times the model tried to say yes
+
+Each of these was measured during the build, not imagined afterwards.
+
+**1. It offered the dish it had just refused.** Handed `do_not_serve` and the reason that fish
+sauce is structural to pad thai, Gemma wrote:
+
+> _"We can offer you the Pad Thai without any added fish sauce instead."_
+
+That is the sentence that puts an allergic diner in an ambulance. Strengthening the system
+prompt did not fix it. Restating the prohibition inside the facts block did not fix it.
+
+**2. It implied a refusal had lifted.** After a _cross-contact_ refusal it wrote _"We can omit
+the crushed peanuts if you would like"_ — subtler, and just as dangerous.
+
+So the model's own prose gets a deterministic check. Any offer to make, serve or adjust the
+refused dish discards the generated text for text assembled from facts — which is then
+_translated_ rather than regenerated, because translation cannot invent an offer the source
+does not contain.
+
+**3. It checked a dish against nothing.** Given _"I have a tree nut allergy"_, it once returned
+an empty `avoid` list, and the run carried on to the kitchen question with no allergen to ask
+about. A case with nothing to check now stops rather than looking as though it was checked.
+
+**A language model is never the last line of defence — and that has to include what it writes
+about its own verdict.**
 
 **Reliability comes from the harness, not from a 2B model remembering to plan well.** Track 2
 asks whether an agent survives contact with failure; a loop that _guarantees_ escalation is a
