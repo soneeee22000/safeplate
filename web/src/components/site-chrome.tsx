@@ -6,17 +6,18 @@ export function SiteHeader() {
   return (
     <header className="border-console-line bg-console/90 sticky top-0 z-10 border-b backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
-        <Link
-          href="/"
-          className="font-display text-lg font-bold tracking-tight"
-        >
-          SafePlate
+        <Link href="/" aria-label="SafePlate home">
+          <span className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            SafePlate
+          </span>
         </Link>
         <nav className="flex items-center gap-6 font-mono text-xs tracking-wider uppercase">
-          <Link
-            href="/order"
-            className="border-paper bg-paper text-console hover:bg-paper-shade flex min-h-11 items-center border px-4 transition-colors"
-          >
+          <Link href="/order" className="app-cta">
             Try it
           </Link>
           <Link
