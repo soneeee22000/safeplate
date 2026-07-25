@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TicketLine } from "@/components/evidence-ticket";
+import recordedCases from "@/data/symphony-cases.json";
 import {
   POLL_INTERVAL_MS,
   orchestrator,
@@ -202,21 +203,80 @@ interface OrderRun {
   reset: () => void;
 }
 
+/** A recorded run, with the request that produced it. */
+type RecordedCase = Trace & { request: string };
+
+const RECORDED: RecordedCase[] = recordedCases as unknown as RecordedCase[];
+
+const REPLAY_STEP_MS = 900;
+
 /**
- * One case against the orchestrator, polled to completion.
+ * Pick the recorded run that best answers what was asked.
  *
- * There is no recorded fallback here. The staff console can replay a run to
- * show what the agent does; a diner reading a verdict has to be told plainly
- * that nothing was checked, so an unreachable orchestrator produces a notice
- * rather than a result.
+ * Scored on shared words rather than matched exactly, because the diner types
+ * their own sentence and the recorded request is only ever an approximation of
+ * it. Returns null when nothing overlaps, which the caller reports honestly
+ * instead of replaying an unrelated case.
+ */
+function bestRecorded(request: string, dishName: string): RecordedCase | null {
+  const words = new Set(
+    `${request} ${dishName}`
+      .toLowerCase()
+      .replace(/[^\p{L}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 3),
+  );
+
+  let best: RecordedCase | null = null;
+  let bestScore = 0;
+  for (const candidate of RECORDED) {
+    const target =
+      `${candidate.request} ${candidate.dish} ${candidate.allergen}`.toLowerCase();
+    let score = 0;
+    for (const word of words) if (target.includes(word)) score += 1;
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return bestScore >= 2 ? best : null;
+}
+
+/**
+ * One case: run live against the orchestrator, or replay a recorded one.
+ *
+ * The staff console replays to show what the agent does. Doing the same here
+ * needed care, because a diner reading a verdict must never mistake a recording
+ * for a check that just happened — so replay is labelled as a recording
+ * everywhere it appears, and a request nothing was recorded for says so rather
+ * than showing the nearest unrelated answer.
  */
 function useOrderRun(live: boolean): OrderRun {
   const [view, setView] = useState<OrderView>(IDLE_VIEW);
   const runIdRef = useRef<string | null>(null);
+  const replayRef = useRef<RecordedCase | null>(null);
 
   const start = useCallback(
     async (request: CaseRequest) => {
-      if (!live) return;
+      if (!live) {
+        const spoken = request.text ?? "";
+        const recorded = bestRecorded(spoken, spoken);
+        if (!recorded) {
+          setView({
+            status: "failed",
+            steps: [],
+            trace: null,
+            error:
+              "no recorded run matches that question, and nothing was checked. " +
+              "Try one of the example questions, or ask a member of staff.",
+          });
+          return;
+        }
+        replayRef.current = recorded;
+        setView({ status: "running", steps: [], trace: null });
+        return;
+      }
+
       setView({ status: "running", steps: [], trace: null });
       try {
         runIdRef.current = await orchestrator.postCase(request);
@@ -246,25 +306,82 @@ function useOrderRun(live: boolean): OrderRun {
     }
   }, []);
 
+  // Replay advances one recorded step at a time so the diner can read the
+  // agent's working, which is the point of showing it at all.
+  const advanceReplay = useCallback(() => {
+    const recorded = replayRef.current;
+    if (!recorded) return;
+
+    setView((current) => {
+      const next = current.steps.length + 1;
+      if (next > recorded.steps.length) {
+        return { ...current, status: "complete", trace: recorded };
+      }
+      const steps = recorded.steps.slice(0, next);
+      const waiting =
+        steps[steps.length - 1]?.tool === "ask_kitchen" &&
+        next < recorded.steps.length;
+      return {
+        status: waiting ? "awaiting_staff" : "running",
+        steps,
+        trace: null,
+        pendingQuestion: waiting
+          ? (steps[steps.length - 1].args?.question as string | undefined)
+          : undefined,
+      };
+    });
+  }, []);
+
   useEffect(() => {
     if (view.status !== "running") return;
-    const timer = window.setInterval(() => void poll(), POLL_INTERVAL_MS);
+    const timer = window.setInterval(
+      () => (live ? void poll() : advanceReplay()),
+      live ? POLL_INTERVAL_MS : REPLAY_STEP_MS,
+    );
     return () => window.clearInterval(timer);
-  }, [view.status, poll]);
+  }, [view.status, poll, live, advanceReplay]);
 
-  const answerStaff = useCallback(async (text: string) => {
-    const runId = runIdRef.current;
-    if (!runId) return;
-    try {
-      setView(toView(await orchestrator.postAnswer(runId, text)));
-    } catch (error) {
-      setView((current) => ({
-        ...current,
-        status: "failed",
-        error: reason(error),
-      }));
-    }
-  }, []);
+  const answerStaff = useCallback(
+    async (text: string) => {
+      const recorded = replayRef.current;
+      if (!live && recorded) {
+        // The typed answer replaces the recorded one on the ticket, so the
+        // person answering sees their own words, but the verdict stays the
+        // recorded one — it is not being recomputed from what they typed.
+        setView((current) => ({
+          ...current,
+          status: "running",
+          steps: current.steps.map((step) =>
+            step.tool === "ask_kitchen"
+              ? {
+                  ...step,
+                  result: {
+                    ...step.result,
+                    answered_by: "staff",
+                    answer: text,
+                  },
+                }
+              : step,
+          ),
+          pendingQuestion: undefined,
+        }));
+        return;
+      }
+
+      const runId = runIdRef.current;
+      if (!runId) return;
+      try {
+        setView(toView(await orchestrator.postAnswer(runId, text)));
+      } catch (error) {
+        setView((current) => ({
+          ...current,
+          status: "failed",
+          error: reason(error),
+        }));
+      }
+    },
+    [live],
+  );
 
   const reset = useCallback(() => {
     runIdRef.current = null;
@@ -349,7 +466,7 @@ export function DinerOrder() {
           dish={dish}
           language={language}
           onSubmit={ask}
-          disabled={busy || backend !== "live"}
+          disabled={busy}
           offline={backend === "offline"}
         />
       )}
@@ -412,14 +529,19 @@ function LanguageChooser({
 
 function OfflineNotice() {
   return (
-    <section className="border-refuse text-refuse border p-5">
+    <section className="border-confirm text-confirm-lit border p-5">
       <h2 className="font-display text-lg font-semibold">
-        The agent cannot be reached right now.
+        Recorded runs — the agent is not running right now.
       </h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6">
-        Nothing has been checked, and this screen will not guess on your behalf.
-        Ask a member of staff about your allergy before you order — and tell
-        them what you cannot eat, not just what you would like.
+      <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
+        Gemma 4 is a 7.2 GB model that runs on a laptop, not on this page. What
+        you see below are real runs of the agent against these real labels,
+        replayed step by step — not a live check of your food.
+      </p>
+      <p className="text-confirm-lit mt-2 max-w-2xl text-sm leading-6">
+        So nothing here has been checked for you. If you are ordering, ask a
+        member of staff about your allergy, and tell them what you cannot eat
+        rather than only what you would like.
       </p>
     </section>
   );

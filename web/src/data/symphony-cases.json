@@ -1,0 +1,607 @@
+[
+  {
+    "case_id": "SP-DEMO-01",
+    "restaurant": "SafePlate demo service",
+    "dish": "Gnocchis pesto vegan",
+    "allergen": "tree nuts",
+    "diner_language": "en",
+    "verdict": "do_not_serve",
+    "total_ms": 57599,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?",
+          "language": "en",
+          "dish": "gnocchis pesto",
+          "avoid": [
+            "tree nuts"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 29706,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Gnocchis pesto vegan",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Gnocchis pesto vegan",
+          "avoid": [
+            "tree nuts"
+          ]
+        },
+        "result": {
+          "outcome": "label_conflict",
+          "label_conflicts": [
+            {
+              "ingredient": "pignons de pin",
+              "declared_in_bold": false
+            }
+          ],
+          "shared_facility_matches": [
+            "tree nuts"
+          ],
+          "vegan_misreads": [
+            "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree nuts. They are printed in the ingredient list but not in bold, so a diner checking the bold allergen text will not see them. The dish is also sold as vegan, which describes animal products and says nothing about nuts. The nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
+          ]
+        },
+        "duration_ms": 0,
+        "note": "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree nuts. They are printed in the ingredient list but not in bold, so a diner checking the bold allergen text will not see them. The dish is also sold as vegan, which describes animal products and says nothing about nuts. The nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
+      },
+      {
+        "n": 3,
+        "tool": "escalate",
+        "engine": "rule",
+        "title": "Refuse rather than guess",
+        "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+        "forced": true,
+        "args": {
+          "verdict": "do_not_serve"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0,
+        "forced_by": "an ingredient the diner must avoid is on the label but not in the bold allergen text"
+      },
+      {
+        "n": 4,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (en)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 27893
+      }
+    ],
+    "evidence": [],
+    "explanation": "We cannot serve this as requested. The label lists pignons de pin (pine nuts). It is not in the bold allergen text, which is why it is easy to miss.  Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
+    "explanation_en": "We cannot serve this as requested. The label lists pignons de pin (pine nuts). It is not in the bold allergen text, which is why it is easy to miss.  Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
+    "request": "I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?"
+  },
+  {
+    "case_id": "SP-DEMO-02",
+    "restaurant": "SafePlate demo service",
+    "dish": "Gnocchis pesto vegan",
+    "allergen": "gluten",
+    "diner_language": "en",
+    "verdict": "do_not_serve",
+    "total_ms": 128514,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "I am coeliac. Can I eat the gnocchis pesto vegan?",
+          "language": "en",
+          "dish": "gnocchi pesto vegan",
+          "avoid": [
+            "gluten"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 71848,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Gnocchis pesto vegan",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Gnocchis pesto vegan",
+          "avoid": [
+            "gluten"
+          ]
+        },
+        "result": {
+          "outcome": "label_conflict",
+          "label_conflicts": [
+            {
+              "ingredient": "gnocchis",
+              "declared_in_bold": true
+            },
+            {
+              "ingredient": "levure diététique",
+              "declared_in_bold": true
+            }
+          ],
+          "shared_facility_matches": [
+            "gluten"
+          ],
+          "vegan_misreads": [
+            "Vegan does not mean gluten-free. This plat declares gluten twice: in the gnocchi themselves and in the dietary yeast used for the pesto."
+          ]
+        },
+        "duration_ms": 0,
+        "note": "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree nuts. They are printed in the ingredient list but not in bold, so a diner checking the bold allergen text will not see them. The dish is also sold as vegan, which describes animal products and says nothing about nuts. The nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
+      },
+      {
+        "n": 3,
+        "tool": "escalate",
+        "engine": "rule",
+        "title": "Refuse rather than guess",
+        "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+        "forced": true,
+        "args": {
+          "verdict": "do_not_serve"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0,
+        "forced_by": "the label declares it outright"
+      },
+      {
+        "n": 4,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (en)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 56665
+      }
+    ],
+    "evidence": [],
+    "explanation": "We cannot serve this as requested. The gnocchi contain wheat, and the dietary yeast used in the pesto also contains gluten. Therefore, we cannot prepare this dish without gluten. We can offer you an alternative dish instead.",
+    "explanation_en": "We cannot serve this as requested. The gnocchi contain wheat, and the dietary yeast used in the pesto also contains gluten. Therefore, we cannot prepare this dish without gluten. We can offer you an alternative dish instead.",
+    "request": "I am coeliac. Can I eat the gnocchis pesto vegan?"
+  },
+  {
+    "case_id": "SP-DEMO-03",
+    "restaurant": "SafePlate demo service",
+    "dish": "Paëlla poisson chorizo et poulet",
+    "allergen": "fish",
+    "diner_language": "en",
+    "verdict": "do_not_serve",
+    "total_ms": 50230,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "I am allergic to fish. Can I have the paella?",
+          "language": "en",
+          "dish": "paella",
+          "avoid": [
+            "fish"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 22985,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Paëlla poisson chorizo et poulet",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Paëlla poisson chorizo et poulet",
+          "avoid": [
+            "fish"
+          ]
+        },
+        "result": {
+          "outcome": "label_conflict",
+          "label_conflicts": [
+            {
+              "ingredient": "cabillaud",
+              "declared_in_bold": true
+            }
+          ],
+          "shared_facility_matches": [
+            "fish"
+          ],
+          "vegan_misreads": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "escalate",
+        "engine": "rule",
+        "title": "Refuse rather than guess",
+        "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+        "forced": true,
+        "args": {
+          "verdict": "do_not_serve"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0,
+        "forced_by": "the label declares it outright"
+      },
+      {
+        "n": 4,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (en)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 27245
+      }
+    ],
+    "evidence": [],
+    "explanation": "We cannot serve the paella as requested. The cod is cooked into the rice and sealed in the tray at the factory, so we cannot remove it. We can offer you an alternative dish instead.",
+    "explanation_en": "We cannot serve the paella as requested. The cod is cooked into the rice and sealed in the tray at the factory, so we cannot remove it. We can offer you an alternative dish instead.",
+    "request": "I am allergic to fish. Can I have the paella?"
+  },
+  {
+    "case_id": "SP-DEMO-04",
+    "restaurant": "SafePlate demo service",
+    "dish": "Paëlla poisson chorizo et poulet",
+    "allergen": "shellfish",
+    "diner_language": "en",
+    "verdict": "verified",
+    "total_ms": 46578,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "I am allergic to shellfish. Can I eat the paella?",
+          "language": "en",
+          "dish": "paella",
+          "avoid": [
+            "shellfish"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 18664,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Paëlla poisson chorizo et poulet",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Paëlla poisson chorizo et poulet",
+          "avoid": [
+            "shellfish"
+          ]
+        },
+        "result": {
+          "outcome": "outside_the_declaration",
+          "label_conflicts": [],
+          "shared_facility_matches": [],
+          "vegan_misreads": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "ask_kitchen",
+        "engine": "human",
+        "title": "The agent asks what no label can answer",
+        "reasoning": "The workshop line is silent on this allergen, which is not the same as the workshop promising its absence. A human confirms.",
+        "forced": true,
+        "args": {
+          "question": "Paëlla poisson chorizo et poulet: the label does not list shellfish and the workshop declaration does not cover it. Is there ANY way shellfish could reach this plate in service?"
+        },
+        "result": {
+          "answered_by": "chef",
+          "answer": "Non - bac scelle en usine, aucun crustace dans ce plat ni en service"
+        },
+        "duration_ms": 0,
+        "forced_by": "label silent on the requested allergen"
+      },
+      {
+        "n": 4,
+        "tool": "interpret_answer",
+        "engine": "rule",
+        "title": "The kitchen's answer decides it",
+        "reasoning": "A human said what the documents could not. The verdict follows from that answer, not from the model's impression of it.",
+        "forced": false,
+        "args": {
+          "answer": "Non - bac scelle en usine, aucun crustace dans ce plat ni en service"
+        },
+        "result": {
+          "verdict": "verified"
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 5,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (en)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "verified",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "verified"
+        },
+        "duration_ms": 27913
+      }
+    ],
+    "evidence": [],
+    "explanation": "You can eat the paella. This dish contains fish, chorizo, and chicken, but there are no shellfish ingredients in this meal.",
+    "explanation_en": "You can eat the paella. This dish contains fish, chorizo, and chicken, but there are no shellfish ingredients in this meal.",
+    "request": "I am allergic to shellfish. Can I eat the paella?"
+  },
+  {
+    "case_id": "SP-DEMO-05",
+    "restaurant": "SafePlate demo service",
+    "dish": "Pâtes bolognaises (spécialité du chef Symphony)",
+    "allergen": "dairy",
+    "diner_language": "en",
+    "verdict": "do_not_serve",
+    "total_ms": 52164,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "I cannot eat dairy. Is the bolognaise okay?",
+          "language": "en",
+          "dish": "bolognaise",
+          "avoid": [
+            "dairy"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 19395,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Pâtes bolognaises (spécialité du chef Symphony)",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Pâtes bolognaises (spécialité du chef Symphony)",
+          "avoid": [
+            "dairy"
+          ]
+        },
+        "result": {
+          "outcome": "label_conflict",
+          "label_conflicts": [
+            {
+              "ingredient": "emmental",
+              "declared_in_bold": true
+            },
+            {
+              "ingredient": "Parmesan",
+              "declared_in_bold": true
+            }
+          ],
+          "shared_facility_matches": [
+            "dairy"
+          ],
+          "vegan_misreads": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "escalate",
+        "engine": "rule",
+        "title": "Refuse rather than guess",
+        "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+        "forced": true,
+        "args": {
+          "verdict": "do_not_serve"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0,
+        "forced_by": "the label declares it outright"
+      },
+      {
+        "n": 4,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (en)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 32768
+      }
+    ],
+    "evidence": [],
+    "explanation": "We cannot serve this as requested. The label lists emmental (Emmental cheese). The label lists Parmesan (Parmesan cheese). Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
+    "explanation_en": "We cannot serve this as requested. The label lists emmental (Emmental cheese). The label lists Parmesan (Parmesan cheese). Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
+    "request": "I cannot eat dairy. Is the bolognaise okay?"
+  },
+  {
+    "case_id": "SP-DEMO-06",
+    "restaurant": "SafePlate demo service",
+    "dish": "Pâtes bolognaises (spécialité du chef Symphony)",
+    "allergen": "celery",
+    "diner_language": "fr",
+    "verdict": "do_not_serve",
+    "total_ms": 74157,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "gemma",
+        "title": "Gemma hears the diner",
+        "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "Je suis allergique au celeri. Les pates bolognaises, c'est possible ?",
+          "language": "fr",
+          "dish": "pasta bolognese",
+          "avoid": [
+            "celery"
+          ],
+          "request_type": "question"
+        },
+        "duration_ms": 20065,
+        "note": "Typed input — same extraction path."
+      },
+      {
+        "n": 2,
+        "tool": "read_label",
+        "engine": "rule",
+        "title": "The label decides — Pâtes bolognaises (spécialité du chef Symphony)",
+        "reasoning": "Symphony trays arrive sealed and reheated. What is in them is what the manufacturer printed, and nothing can be left out at the pass.",
+        "forced": false,
+        "args": {
+          "dish": "Pâtes bolognaises (spécialité du chef Symphony)",
+          "avoid": [
+            "celery"
+          ]
+        },
+        "result": {
+          "outcome": "label_conflict",
+          "label_conflicts": [
+            {
+              "ingredient": "céleri",
+              "declared_in_bold": true
+            }
+          ],
+          "shared_facility_matches": [
+            "celery"
+          ],
+          "vegan_misreads": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "escalate",
+        "engine": "rule",
+        "title": "Refuse rather than guess",
+        "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+        "forced": true,
+        "args": {
+          "verdict": "do_not_serve"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0,
+        "forced_by": "the label declares it outright"
+      },
+      {
+        "n": 4,
+        "tool": "compose_reply",
+        "engine": "gemma",
+        "title": "Gemma explains it in the diner's language (fr)",
+        "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "fr"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 54092
+      }
+    ],
+    "evidence": [],
+    "explanation": "Nous ne pouvons pas servir ce plat comme demandé. Le céleri fait partie de la base de la sauce bolognaise et est donc essentiel à cette recette. Je peux vous proposer une autre option.",
+    "explanation_en": "We cannot serve the pâtes bolognaises as requested. Celery is an essential part of the seasoning base for this dish. Because it is incorporated into the sauce, we cannot prepare it without it.",
+    "request": "Je suis allergique au celeri. Les pates bolognaises, c'est possible ?"
+  }
+]

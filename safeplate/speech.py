@@ -40,6 +40,11 @@ Return ONLY a JSON object, no prose, with exactly these keys:
 
 Rules:
 - "avoid" holds what the diner cannot or will not eat. Translate to English.
+- "avoid" must NEVER be empty when the diner states an allergy or an intolerance.
+  "I have a tree nut allergy" -> ["tree nuts"]. "I am coeliac" -> ["gluten"].
+  "I cannot eat dairy" -> ["dairy"]. "no shellfish for me" -> ["shellfish"].
+  Extract the food even when the sentence is phrased as a condition rather than
+  as a request.
 - "modification" means they asked for the dish changed. "question" means they \
 asked whether something is present. "declaration" means they only stated a \
 restriction.

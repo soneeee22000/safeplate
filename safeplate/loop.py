@@ -145,6 +145,19 @@ def begin(run: Run, *, audio: bytes | None = None, text: str | None = None,
             verdict="needs_confirmation",
         )
 
+    # Measured failure: handed "I have a tree nut allergy", E2B once returned an
+    # empty `avoid` and the run carried on checking a dish against nothing — it
+    # reached the kitchen question without an allergen to ask about. A case with
+    # no allergen cannot be checked, so it stops here rather than looking as
+    # though it was.
+    if not intent.avoid:
+        return _forced_escalate(
+            run, "no allergen understood",
+            "The agent did not catch what the diner cannot eat, and will not check a "
+            "dish against nothing. The question has to be asked again.",
+            verdict="needs_confirmation",
+        )
+
     # Symphony.fr is the onboarded restaurant, so its real labels are consulted
     # before the generic dish table. A sealed frozen tray is a different problem
     # from a dish a chef assembles: nothing can be left out of it, and the
