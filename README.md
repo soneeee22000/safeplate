@@ -13,13 +13,23 @@ server has thirty seconds, a jar labelled in another language, and a legal oblig
 guess.
 
 SafePlate photographs the label, reads it on-device, maps ingredients to the EU's 14 declarable
-allergens, looks up the manufacturer's declaration when the label doesn't resolve, and produces
-a safety card in the customer's language — **or refuses, and says exactly why.** Its most
-valuable output is often `DO NOT SERVE — I can't confirm`.
+allergens, looks up the manufacturer's declaration when the label doesn't resolve, **asks the
+kitchen the one thing no label can tell it**, and answers in the diner's language — or refuses,
+and says exactly why. Its most valuable output is often `DO NOT SERVE — I can't confirm`.
 
 Built for the **Gemma 4 Hackathon | Paris**, Track 2 (Autonomous Agents), 42 Paris.
 
-<!-- TODO: Add demo GIF -->
+### Try it
+
+|                      |                                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Operator console** | **<https://safeplate-ten.vercel.app/verify>** — open a case, watch the agent work, answer the kitchen yourself |
+| **Project page**     | <https://safeplate-ten.vercel.app>                                                                             |
+
+> These pages **replay a recorded run**. They are genuinely interactive — the trace prints step
+> by step and the kitchen question waits for an answer you type — but Gemma is not executing
+> behind them. The model is 7.2 GB behind Ollama with a local Tesseract binary, so the agent
+> itself runs on a laptop, not on a web host. The interface says which mode it is in.
 
 ---
 
@@ -43,51 +53,58 @@ is deterministic and auditable.
 ```mermaid
 flowchart TD
     PHOTO["Label photo"] --> OCR["read_label<br/>Tesseract, 0.9s"]
-    OCR -->|low confidence| RESHOOT["Recovery:<br/>ask for a new photo"]
+    OCR -->|confidence below 0.75| RESHOOT["FORCED: ask for<br/>a second photo"]
     RESHOOT --> OCR
-    OCR -->|text| GEMMA["Gemma 4 E2B<br/>structure ingredients"]
+    OCR -->|text| GEMMA["structure_ingredients<br/>Gemma 4 E2B"]
     GEMMA --> MATCH["match_allergens<br/>EU-14 table, deterministic"]
-    MATCH -->|all resolved| CARD
-    MATCH -->|unresolved| LOOKUP["lookup_product<br/>SerpApi"]
-    LOOKUP -->|sources agree| CARD["Safety card<br/>+ agent trace"]
-    LOOKUP -->|sources conflict| STOP["escalate<br/>DO NOT SERVE"]
+    MATCH -->|unresolved token| LOOKUP["FORCED: lookup_product<br/>SerpApi"]
+    MATCH -->|all resolved| ASK
+    LOOKUP -->|sources conflict| STOP
+    LOOKUP -->|declaration found| ASK["FORCED: ask_kitchen<br/>cross-contact, a human answers"]
+    ASK -->|shared equipment| STOP["escalate<br/>DO NOT SERVE"]
+    ASK -->|ruled out| CARD["verdict + evidence trace<br/>in the diner's language"]
 
     style STOP fill:#f6e2e0,stroke:#a02f28,color:#111
     style CARD fill:#e0efe6,stroke:#176b45,color:#111
     style MATCH fill:#eef1f5,stroke:#2a4c99,color:#111
+    style ASK fill:#e8e9f7,stroke:#1f3a93,color:#111
 ```
 
-Everything except `lookup_product` runs on-device. The dashed path is not an error case bolted
-on afterwards — it is the behaviour the project is built around.
+Everything except `lookup_product` runs on-device. Every branch marked **FORCED** is compelled
+by the orchestrator, not chosen by the model — see
+[Escalation is enforced by the loop](#escalation-is-enforced-by-the-loop-not-by-the-model).
+
+**`ask_kitchen` is the step that makes this more than a label reader.** A clean label never
+clears a dish on its own, because cross-contact is not written on any label and never will be.
 
 ## Who it's for
 
 ```mermaid
 flowchart LR
-    C(["Customer<br/>allergy, other language"])
-    S(["Server<br/>30 seconds, no training"])
-    M(["Manager<br/>liable for the answer"])
+    S(["SERVER<br/>the only operator"])
+    K(["CHEF<br/>answers one question"])
+    D(["DINER<br/>receives, never operates"])
 
-    U1["Ask: does this contain X?"]
-    U2["Scan the ingredient label"]
-    U3["Answer in the customer's language"]
-    U4["Printable safety card"]
-    U5["Review the decision log"]
+    U1["Open a case:<br/>allergen + language"]
+    U2["Photograph the label"]
+    U3["Answer the agent's<br/>cross-contact question"]
+    U4["Receive the verdict<br/>in their own language"]
 
-    C --> U1
+    S --> U1
     S --> U2
-    S --> U3
-    C --> U4
-    M --> U5
+    K --> U3
+    U4 --> D
 
-    U2 -. includes .-> U3
-    U3 -. includes .-> U4
+    U2 -. triggers .-> U3
+    U3 -. resolves .-> U4
 ```
 
-**The server is the user; the customer and the manager are who it protects.** A server holding
-a jar has no allergen training, no time, and often no shared language with the person asking.
-Today the options are guess, refuse everything, or go find a chef. All three are bad — and the
-first is the one that sends people to hospital.
+**One device, one screen, three people served.** The server holds the phone. The chef answers on
+that same screen — there is no second app. The diner never touches it.
+
+A server holding a jar has no allergen training, no time, and often no shared language with the
+person asking. Today the options are guess, refuse everything, or go find a chef. All three are
+bad — and the first is the one that sends people to hospital.
 
 SafePlate's job is not to be clever. It is to turn thirty seconds of guessing into a sourced
 answer, or an honest refusal that a manager can stand behind.
@@ -146,9 +163,11 @@ Latency: **24.0 s** first tool-calling turn (schemas in context, model cold), **
 - **On-device label reading** — Tesseract (`eng+fra`); no photo leaves the machine
 - **EU-14 allergen matching** — Regulation (EU) No 1169/2011, with synonym resolution
 - **Guaranteed escalation** — unresolved ingredients always trigger an external lookup
+- **The agent asks a human** — cross-contact is evidence no document contains, so it stops and asks the kitchen
 - **Refusal as a first-class outcome** — conflicting sources produce `DO NOT SERVE`, never an average
-- **Multilingual output** — verdict rendered in the customer's language
-- **Visible agent trace** — every tool call, result and decision shown, not summarised
+- **Multilingual output** — verdict rendered in the diner's language
+- **Visible agent trace** — every tool call, result and decision shown, not summarised, with each
+  step labelled by what produced it: Gemma, a deterministic rule, SerpApi, or a human
 
 ## Tech stack
 
@@ -160,6 +179,7 @@ Latency: **24.0 s** first tool-calling turn (schemas in context, model cold), **
 | Orchestrator      | FastAPI                              | Owns control flow and forced escalation             |
 | Allergen logic    | Plain Python table                   | Deterministic and auditable by design               |
 | External evidence | SerpApi (`engine=google`)            | Manufacturer declarations the label omits           |
+| Interface         | Next.js 16 · TypeScript · Tailwind 4 | Operator console + agent trace, deployed on Vercel  |
 
 > **`think: false` is load-bearing.** Gemma 4 E2B otherwise emits a chain-of-thought into
 > Ollama's separate `thinking` field — invisible output you still wait for, at roughly 3x the
@@ -200,13 +220,46 @@ export SERPAPI_KEY=...
 
 ```
 safeplate/          config · llm (tuned Ollama client) · ocr (Tesseract reader)
+fixtures/           recorded runs — one refusal, one clearance. THE FROZEN CONTRACT.
+web/                Next.js operator console and landing page
+  src/lib/trace.ts        the same schema, typed
+  src/lib/orchestrator.ts the FastAPI client + demo replay
 docs/
-  safeplate-spec.md architecture, use-case and sequence diagrams, tool contracts
+  safeplate-mvp-decision.md  scope, persona, rubric mapping — read this first
+  safeplate-spec.md          tool contracts, gate results, sequence diagram
 tessdata/           Tesseract language data (eng, fra)
 ```
 
+**`fixtures/trace-refusal.json` is the contract everything agrees on.** The Python loop emits
+that shape and the interface renders it, so both sides were built in parallel without waiting
+on each other. Start there.
+
 Full technical spec, including the frozen tool contracts and the EU-14 allergen set:
 **[`docs/safeplate-spec.md`](docs/safeplate-spec.md)**
+
+### Running the interface
+
+```bash
+cd web
+npm install
+npm run dev          # http://localhost:3000/verify
+```
+
+It talks to the orchestrator at `http://127.0.0.1:8000` when that is up, and replays a recorded
+case when it is not — labelled in the interface so the two are never confused. Point it
+elsewhere with `NEXT_PUBLIC_ORCHESTRATOR_URL`.
+
+The orchestrator contract the interface expects:
+
+```
+POST /api/case                  -> { run_id }
+GET  /api/case/{run_id}         -> { status, pending_question?, trace }
+POST /api/case/{run_id}/answer  -> { status, trace }
+GET  /health
+```
+
+`status` is one of `running`, `awaiting_human`, `complete`, `failed`. A run genuinely stops on
+`awaiting_human` until the kitchen answers.
 
 ## Team
 
