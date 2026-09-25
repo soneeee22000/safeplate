@@ -13,7 +13,7 @@ So each ingredient carries a role:
   removable     - comes out cleanly, nothing else changes.
 
 Like `allergens.py`, this is data rather than generation. Gemma works out what
-the diner asked for; this table decides whether it is possible. A 5B model
+the diner asked for; this table decides whether it is possible. A small model
 guessing at culinary structure is exactly the failure this project exists to
 avoid.
 """

@@ -156,6 +156,15 @@ def display_name(code: str) -> str:
     return language.endonym if language else _canonical(code)
 
 
+def english_name(code: str) -> str:
+    """The language's name in English, for staff-facing labels.
+
+    Falls back to the bare code when the language is not in the table.
+    """
+    language = _lookup(code)
+    return language.english_name if language else _canonical(code)
+
+
 def generation_instruction(code: str) -> str:
     """The sentence to append to a generation prompt so Gemma answers in `code`.
 

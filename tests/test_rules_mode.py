@@ -177,6 +177,54 @@ def test_falafel_sesame_waits_for_the_kitchen_then_unsure_needs_confirmation() -
     assert run.steps[-1].engine == "rule"
 
 
+def test_falafel_kitchen_risk_refuses_without_offering_the_dish_back() -> None:
+    run = _run("Can I get the falafel without sesame?")
+    loop.answer_kitchen(run, "Falafel goes through the shared fryer", risk="risk")
+
+    assert run.verdict == "do_not_serve"
+    assert run.explanation.startswith(voice.VERDICT_OPENERS["do_not_serve"])
+    assert "alternative" not in run.explanation.lower()
+    assert "harissa" not in run.explanation.lower()
+    assert "sesame could reach this plate" in run.explanation
+    assert "shared fryer" in run.explanation
+    assert not voice.contradicts_refusal(run.explanation, run)
+
+
+@pytest.mark.parametrize(
+    ("risk", "expected"),
+    [
+        ("none", "The kitchen confirmed no risk of sesame on this plate."),
+        ("unsure", "The kitchen could not confirm that sesame stays off this plate."),
+    ],
+)
+def test_structured_kitchen_answers_read_as_sentences(risk: str, expected: str) -> None:
+    run = _run("Can I get the falafel without sesame?")
+    loop.answer_kitchen(run, "", risk=risk)
+
+    assert run.explanation.endswith(expected)
+    assert f"The kitchen said: {risk}" not in run.explanation
+
+
+def test_rules_reply_step_title_names_the_language_in_words() -> None:
+    run = _run("Je suis allergique au céleri. Les pâtes bolognaises, c'est possible ?")
+    title = run.steps[-1].title
+
+    assert "requested)" not in title
+    assert "in English (the diner spoke French)" in title
+
+
+def test_an_offer_in_a_rules_reply_is_replaced_by_a_bare_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = _run("I'm allergic to fish, can I have the pad thai without fish sauce?")
+    monkeypatch.setattr(voice, "_fallback", lambda _run: "Alternative: omit the fish sauce.")
+
+    original, english = voice.compose_rules_reply(run)
+
+    assert english == voice.MINIMAL_REFUSAL
+    assert not voice.contradicts_refusal(original, run)
+
+
 def test_unrecognised_allergen_fails_closed() -> None:
     run = _run("Can I have the pad thai please?")
     assert run.verdict == "needs_confirmation"

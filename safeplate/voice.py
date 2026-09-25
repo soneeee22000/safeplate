@@ -42,6 +42,7 @@ OFFER_PATTERNS = (
     "we could", "i could", "we can do", "we can omit", "i can omit",
     "can be made without", "can be prepared without", "instead we can",
     "without any added", "without the added", "happy to make", "able to make",
+    "alternative:",
 )
 
 #: Offers of a *different* dish are legitimate after a refusal, so they survive.
@@ -54,6 +55,35 @@ def advisory_sentence(ingredient: str) -> str:
     """What the diner reads about an ingredient that carries an advisory."""
     notes = " ".join(ADVISORIES[advisory] for advisory in advisories(ingredient))
     return f"{ingredient[:1].upper()}{ingredient[1:]}: {notes[:1].lower()}{notes[1:]}"
+
+
+#: What the kitchen's structured call means, in words a diner can read.
+KITCHEN_RISK_SENTENCES = {
+    "risk": "The kitchen says {allergen} could reach this plate.",
+    "unsure": "The kitchen could not confirm that {allergen} stays off this plate.",
+}
+KITCHEN_CLEAR = "The kitchen confirmed no risk of {allergen} on this plate."
+KITCHEN_CLEAR_UNCONFIRMED = "The kitchen answered no risk, but not clearly enough to confirm it."
+
+
+def kitchen_sentence(run: Run) -> str:
+    """The kitchen's answer as the diner reads it: never the raw `none`/`risk` value.
+
+    A structured call becomes a sentence naming the allergen, followed by the
+    chef's own note when there is one. A free-text answer is quoted as given.
+    """
+    risk = run.kitchen_risk
+    note = run.kitchen_note or ("" if risk else (run.kitchen_answer or "").strip())
+    if risk is None:
+        return f"The kitchen said: \u201c{note}\u201d" if note else ""
+    avoided = run.intent.avoid if run.intent else []
+    allergen = ", ".join(avoided) or "the allergen"
+    if risk == "none":
+        template = KITCHEN_CLEAR if run.verdict == "verified" else KITCHEN_CLEAR_UNCONFIRMED
+    else:
+        template = KITCHEN_RISK_SENTENCES.get(risk, KITCHEN_RISK_SENTENCES["unsure"])
+    sentence = template.format(allergen=allergen)
+    return f"{sentence} Kitchen note: \u201c{note}\u201d" if note else sentence
 
 
 #: Who wrote the reply the diner reads, so the trace credits the right engine.
@@ -94,9 +124,10 @@ def _facts(run: Run) -> str:
                 f"{finding.ingredient.name}, or with less of it, or with it on the "
                 f"side. It is impossible. Suggest a different dish from the menu."
             )
-        for finding in assessment.adjustable:
-            substitute = finding.ingredient.substitute or f"omit the {finding.ingredient.name}"
-            lines.append(f"Can adjust {finding.ingredient.name} — {substitute}")
+        if run.verdict != "do_not_serve":
+            for finding in assessment.adjustable:
+                substitute = finding.ingredient.substitute or f"omit the {finding.ingredient.name}"
+                lines.append(f"Can adjust {finding.ingredient.name} — {substitute}")
         for finding in assessment.advisory:
             lines.append(f"ASK THE DINER: {advisory_sentence(finding.ingredient.name)}")
     elif assessment and assessment.unknown_dish:
@@ -123,8 +154,9 @@ def _facts(run: Run) -> str:
         label = "Source" if statement.trusted else "Unverified web source"
         lines.append(f"{label} {statement.source}: {statement.text}")
 
-    if run.kitchen_answer:
-        lines.append(f"The kitchen said: {run.kitchen_answer}")
+    kitchen = kitchen_sentence(run)
+    if kitchen:
+        lines.append(kitchen)
 
     return "\n".join(lines)
 
@@ -243,6 +275,8 @@ def compose_rules_reply(run: Run) -> tuple[str, str]:
     a machine-free English answer beats a sentence nobody verified.
     """
     english = _fallback(run)
+    if contradicts_refusal(english, run):
+        english = MINIMAL_REFUSAL
     code = run.intent.language if run.intent else languages.DEFAULT_LANGUAGE_CODE
     canonical = code.strip().lower().replace("_", "-").split("-")[0]
     if canonical == languages.DEFAULT_LANGUAGE_CODE or canonical not in languages.SAFETY_PHRASES:
@@ -250,6 +284,12 @@ def compose_rules_reply(run: Run) -> tuple[str, str]:
     if run.verdict == "verified":
         return english, english
     return f"{_checked_sentences(run, canonical)}\n\n{english}", english
+
+
+#: The last resort: a refusal with nothing in it that could read as an offer.
+MINIMAL_REFUSAL = (
+    f"{VERDICT_OPENERS['do_not_serve']} Please speak to a member of staff before ordering."
+)
 
 
 def _checked_sentences(run: Run, code: str) -> str:
@@ -328,11 +368,14 @@ def _fallback(run: Run) -> str:
                 f"The {finding.ingredient.name} cannot be left out, so this dish is not "
                 "possible for you. We can suggest something else from the menu."
             )
-        for finding in run.assessment.adjustable:
-            if finding.ingredient.substitute:
-                parts.append(f"Alternative: {finding.ingredient.substitute}.")
+        # A refusal never offers the refused dish back, adjusted or not.
+        if run.verdict != "do_not_serve":
+            for finding in run.assessment.adjustable:
+                if finding.ingredient.substitute:
+                    parts.append(f"Alternative: {finding.ingredient.substitute}.")
         for finding in run.assessment.advisory:
             parts.append(advisory_sentence(finding.ingredient.name))
-    if run.kitchen_answer:
-        parts.append(f"The kitchen said: {run.kitchen_answer}")
+    kitchen = kitchen_sentence(run)
+    if kitchen:
+        parts.append(kitchen)
     return " ".join(parts)

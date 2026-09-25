@@ -2,7 +2,7 @@
 
 We measured Gemma 4 E2B failing to escalate on its own: handed a result
 containing an unresolved ingredient, it answered about what it did know and
-stopped. A 5B model cannot be trusted to remember to ask for help.
+stopped. A small model cannot be trusted to remember to ask for help.
 
 So escalation is control flow. Every `_forced` step below is compelled by this
 file, not chosen by the model. Gemma decides what the diner meant and how to say
@@ -19,7 +19,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import config, dishes, intake_rules, menu_symphony, serp
+from . import config, dishes, intake_rules, languages, menu_symphony, serp
 from .allergens import conflicts, expand
 from .speech import Intent, SpeechError, understand_audio, understand_text
 from .voice import WRITER_GEMMA, WRITER_TRANSLATED, compose_reply, compose_rules_reply, fixed_reply
@@ -73,6 +73,10 @@ class Run:
     packaged_report: menu_symphony.LabelReport | None = None
     statements: list[serp.Statement] = field(default_factory=list)
     kitchen_answer: str | None = None
+    #: The kitchen's structured call (`none`, `risk`, `unsure`), when it gave one.
+    kitchen_risk: str | None = None
+    #: The chef's own words: free text, or the note beside a structured call.
+    kitchen_note: str = ""
     steps: list[Step] = field(default_factory=list)
     explanation: str = ""
     explanation_en: str = ""
@@ -220,7 +224,7 @@ def begin(run: Run, *, audio: bytes | None = None, text: str | None = None,
     run.add(Step(
         n=0, tool="assess_dish", engine="rule",
         title="The dish table decides what can come out",
-        reasoning="Whether an ingredient is structural is data, not generation. A 5B model "
+        reasoning="Whether an ingredient is structural is data, not generation. A small model "
                   "guessing at culinary structure is exactly what this avoids.",
         args={"dish": intent.dish, "avoid": intent.avoid},
         result={
@@ -737,6 +741,8 @@ def answer_kitchen(run: Run, answer: str = "", *, risk: str | None = None) -> Ru
 
     recorded = answer or (risk or "")
     run.kitchen_answer = recorded
+    run.kitchen_risk = risk
+    run.kitchen_note = answer.strip()
     for step in reversed(run.steps):
         if step.tool == "ask_kitchen":
             step.result = {"answered_by": "chef", "answer": recorded}
@@ -776,7 +782,7 @@ def _speak_failed(run: Run, error: Exception) -> None:
     language = run.intent.language if run.intent else "en"
     run.add(Step(
         n=0, tool="compose_reply", engine="rule",
-        title=f"Reply failed — fixed sentences state the verdict ({language} requested)",
+        title=f"Reply failed — fixed sentences state the verdict, {_in_english(language)}",
         reasoning="Writing the reply raised an error. The verdict is stated with the "
                   "fixed English sentences instead.",
         args={"verdict": run.verdict, "language": language},
@@ -799,34 +805,55 @@ def _record_interpretation(run: Run, answer: str, risk: str | None) -> None:
     ))
 
 
-def _reply_label(writer: str | None, language: str) -> tuple[str, str, str]:
+def _in_english(language: str) -> str:
+    """"in English", plus which language the diner spoke when it was another one."""
+    if languages.english_name(language) == "English":
+        return "in English"
+    return f"in English (the diner spoke {languages.english_name(language)})"
+
+
+def _rules_reply_language(run: Run, language: str) -> str:
+    """How a rules-mode reply is written: English, with checked lines where they exist."""
+    canonical = language.strip().lower().replace("_", "-").split("-")[0]
+    has_checked = (
+        canonical in languages.SAFETY_PHRASES
+        and canonical != languages.DEFAULT_LANGUAGE_CODE
+        and run.verdict != "verified"
+    )
+    if has_checked:
+        return f"in English, with hand-checked {languages.english_name(language)} safety lines"
+    return _in_english(language)
+
+
+def _reply_label(writer: str | None, language: str, run: Run) -> tuple[str, str, str]:
     """The engine, title and reasoning that credit whoever wrote the reply.
 
     `writer` is None in rules mode, where no model is on the host at all.
     """
     if writer is None:
         return (
-            "rule", f"Fixed sentences state the verdict ({language} requested)",
+            "rule", f"Fixed sentences state the verdict, {_rules_reply_language(run, language)}",
             "No model on this host. The reply is assembled from the facts, with "
             "hand-checked safety sentences where the diner's language has them "
             "and English otherwise.",
         )
     if writer == WRITER_GEMMA:
         return (
-            "gemma", f"Gemma explains it in the diner's language ({language})",
+            "gemma", f"Gemma explains it in {languages.english_name(language)}",
             "The verdict was fixed before this ran. Gemma's job is to say it "
             "clearly and give the reason, not to reach it.",
         )
     if writer == WRITER_TRANSLATED:
         return (
-            "gemma", f"Fixed sentences state the verdict; Gemma translated them ({language})",
+            "gemma", f"Fixed sentences state the verdict; Gemma translated them into "
+                     f"{languages.english_name(language)}",
             "Gemma's own reply offered what the loop had refused, so it was discarded. "
             "The fixed sentences were translated instead, and the translation checked "
             "against the refusal again.",
         )
     return (
-        "rule", f"Model unavailable or overruled — fixed sentences state the verdict "
-                f"({language} requested)",
+        "rule", f"Model unavailable or overruled — fixed sentences state the verdict, "
+                f"{_in_english(language)}",
         "Gemma could not be reached, or wrote something that contradicted the verdict. "
         "The reply is the fixed sentences, exactly as assembled from the facts.",
     )
@@ -844,7 +871,7 @@ def _speak(run: Run) -> None:
 
     run.explanation, run.explanation_en = original, english
     language = run.intent.language if run.intent else "en"
-    engine, title, reasoning = _reply_label(writer, language)
+    engine, title, reasoning = _reply_label(writer, language, run)
     run.add(Step(
         n=0, tool="compose_reply", engine=engine,
         title=title, reasoning=reasoning,
