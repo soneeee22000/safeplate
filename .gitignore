@@ -31,11 +31,9 @@ Thumbs.db
 .vscode/
 .idea/
 
-# --- AI tool artifacts ---
-.claude/
-.sixth/
-.cursor/
-.aider*
+# --- Local tool and cache directories (dot-directories other than .github) ---
+.*/
+!.github/
 
 # hackathon working files, not part of the product
 *.pdf
@@ -45,3 +43,6 @@ image.png
 
 # Private correspondence — never publish
 docs/luma-reply-email.md
+
+# Personal post drafts, kept out of the repo
+linkedin/

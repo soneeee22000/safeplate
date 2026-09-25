@@ -197,10 +197,10 @@ def _write(facts: str, language: str) -> str:
 def contradicts_refusal(text: str, run: Run) -> bool:
     """True when the generated message offers what the loop already refused.
 
-    Measured, not hypothetical: handed `do_not_serve` and the reason that fish
+    Observed in development: handed `do_not_serve` and the reason that fish
     sauce is structural to pad thai, E2B wrote *"We can offer you the Pad Thai
-    without any added fish sauce instead."* — the exact sentence that would put
-    an allergic diner in an ambulance.
+    without any added fish sauce instead."* — offering the dish the loop had
+    just refused. A model reply must never overrule a refusal.
 
     A language model is never the last line of defence, and that has to include
     its own prose. This check is deterministic; failing it discards the text.
