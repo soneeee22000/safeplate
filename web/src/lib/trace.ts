@@ -36,6 +36,21 @@ export interface Evidence {
   source: string;
   url: string | null;
   text: string;
+  /** True only for a manufacturer, retailer or product database source. */
+  trusted?: boolean;
+}
+
+/** The kitchen's structured call on cross-contact. */
+export type KitchenRisk = "none" | "risk" | "unsure";
+
+/** One source a `lookup_product` step found, as the orchestrator records it. */
+export interface LookupStatement {
+  source: string;
+  url: string | null;
+  text: string;
+  /** Allergens this source says the product contains. */
+  declares?: string[];
+  trusted: boolean;
 }
 
 export interface Trace {
@@ -67,20 +82,20 @@ interface VerdictPresentation {
 
 export const VERDICT_PRESENTATION: Record<Verdict, VerdictPresentation> = {
   verified: {
-    label: "Safe to serve",
+    label: "Can serve with confirmation",
     consequence:
-      "Every ingredient resolved and the kitchen ruled out cross-contact.",
-    className: "text-verified border-verified",
+      "The kitchen confirmed no risk and the evidence does not contradict it. Serve only as confirmed.",
+    className: "text-verified-ink border-verified",
   },
   needs_confirmation: {
     label: "Needs confirmation",
     consequence: "Something is still unanswered. Do not serve until it is.",
-    className: "text-confirm border-confirm",
+    className: "text-confirm-ink border-confirm",
   },
   do_not_serve: {
     label: "Do not serve",
     consequence:
-      "A risk was confirmed, or the evidence could not be reconciled.",
+      "A risk was confirmed, or it could not be ruled out. I can't confirm this dish.",
     className: "text-refuse border-refuse",
   },
 };
@@ -120,10 +135,10 @@ export const ENGINE_PRESENTATION: Record<Engine, EnginePresentation> = {
   external: {
     label: "SerpApi",
     description: "Evidence fetched from outside the building.",
-    inkClass: "text-confirm",
-    borderClass: "border-confirm",
-    litInkClass: "text-confirm-lit",
-    litBorderClass: "border-confirm-lit",
+    inkClass: "text-serp",
+    borderClass: "border-serp",
+    litInkClass: "text-serp-lit",
+    litBorderClass: "border-serp-lit",
   },
   human: {
     label: "Kitchen",

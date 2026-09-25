@@ -1,381 +1,336 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { RequestForm } from "@/components/request-form";
-import { TicketLine } from "@/components/evidence-ticket";
-import recordedCase from "@/data/trace-refusal.json";
+import { useCallback, useRef } from "react";
+import { History, Radio, RotateCcw } from "lucide-react";
+import { CasePicker } from "@/components/verify/case-picker";
 import {
-  DemoRun,
-  POLL_INTERVAL_MS,
-  orchestrator,
-  probeOrchestrator,
-  type CaseRequest,
-} from "@/lib/orchestrator";
+  KitchenPanel,
+  RecordedKitchenAnswer,
+} from "@/components/verify/kitchen-panel";
+import { ModeBanner, recordedBadge } from "@/components/verify/mode-banner";
+import { RunOutcome } from "@/components/verify/run-outcome";
+import { KindChip, TraceStepLine } from "@/components/verify/trace-step";
+import type { AgentMode } from "@/lib/orchestrator";
 import {
-  LANGUAGE_NAMES,
-  VERDICT_PRESENTATION,
-  countForcedSteps,
-  countGemmaSteps,
-  formatDuration,
-  isRtl,
-  type Trace,
-  type TraceStep,
-} from "@/lib/trace";
-
-type ConsoleStatus =
-  "idle" | "running" | "awaiting_human" | "complete" | "failed";
-
-interface RunView {
-  status: ConsoleStatus;
-  steps: TraceStep[];
-  trace: Trace | null;
-  pendingQuestion?: string;
-  error?: string;
-}
-
-const IDLE_VIEW: RunView = { status: "idle", steps: [], trace: null };
+  RECORDED_CASES,
+  closestRecording,
+  type RecordedCase,
+} from "@/lib/replays";
+import { revealWhenStacked } from "@/lib/reveal";
+import { useAgentConnection } from "@/lib/use-agent-connection";
+import { useVerifyRun, type RunView } from "@/lib/use-verify-run";
 
 /**
- * The operator screen. One server, one device: open a case, watch the agent
- * work, answer the question it puts to the kitchen, read the verdict.
+ * The operator screen: one server, one phone. Pick or type what the diner
+ * asked, watch the agent work, answer the kitchen, read the verdict.
  *
- * Runs against the FastAPI orchestrator when it is up, and replays a recorded
- * case when it is not — so the interface is demonstrable before the loop lands.
+ * Runs against the live agent when it answers, and plays real recorded runs
+ * when it does not, always saying which.
  */
 export function LiveConsole() {
-  const [view, setView] = useState<RunView>(IDLE_VIEW);
-  const [liveBackend, setLiveBackend] = useState(false);
-  const [answer, setAnswer] = useState("");
+  const { connection, skip, retry, markOffline } = useAgentConnection();
+  const liveMode: AgentMode | null =
+    connection.kind === "live" ? connection.mode : null;
+  const waiting =
+    connection.kind === "connecting" || connection.kind === "waking";
+  const { view, start, startReplay, answerKitchen, reset, reconnect } =
+    useVerifyRun(liveMode, markOffline);
+  const traceRef = useRef<HTMLElement>(null);
 
-  const runIdRef = useRef<string | null>(null);
-  const demoRef = useRef<DemoRun | null>(null);
+  const checking = view.phase === "running" || view.phase === "answering";
+  const replaying =
+    view.source?.kind === "replay" ? view.source.recording : null;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    probeOrchestrator(controller.signal)
-      .then(setLiveBackend)
-      .catch(() => {});
-    return () => controller.abort();
+  /** On a phone the trace is below the picker: take the viewer to it. */
+  const reveal = useCallback(() => {
+    window.requestAnimationFrame(() => revealWhenStacked(traceRef.current));
   }, []);
 
-  const startCase = useCallback(
-    async (request: CaseRequest) => {
-      setAnswer("");
-      setView({ status: "running", steps: [], trace: null });
-
-      if (!liveBackend) {
-        demoRef.current = new DemoRun(
-          JSON.parse(JSON.stringify(recordedCase)) as Trace,
-        );
-        return;
-      }
-
-      try {
-        runIdRef.current = await orchestrator.postCase(request);
-      } catch (error) {
-        setView({
-          status: "failed",
-          steps: [],
-          trace: null,
-          error:
-            error instanceof Error ? error.message : "orchestrator unreachable",
-        });
-      }
+  const replay = useCallback(
+    (recording: RecordedCase) => {
+      startReplay(recording);
+      reveal();
     },
-    [liveBackend],
+    [startReplay, reveal],
   );
 
-  // One ticker drives both modes: it advances the recording, or polls the loop.
-  useEffect(() => {
-    if (view.status !== "running") return;
-
-    const timer = window.setInterval(async () => {
-      const demo = demoRef.current;
-
-      if (!liveBackend && demo) {
-        demo.advance();
-        const question = demo.pendingQuestion;
-        setView({
-          status: question
-            ? "awaiting_human"
-            : demo.finished
-              ? "complete"
-              : "running",
-          steps: demo.steps,
-          trace: demo.finished ? demo.trace : null,
-          pendingQuestion: question,
-        });
-        return;
-      }
-
-      const runId = runIdRef.current;
-      if (!runId) return;
-
-      try {
-        const state = await orchestrator.getRun(runId);
-        setView({
-          status:
-            state.status === "failed"
-              ? "failed"
-              : state.status === "complete"
-                ? "complete"
-                : state.status === "awaiting_human"
-                  ? "awaiting_human"
-                  : "running",
-          steps: state.trace.steps,
-          trace: state.status === "complete" ? state.trace : null,
-          pendingQuestion: state.pending_question,
-          error: state.error,
-        });
-      } catch (error) {
-        setView((current) => ({
-          ...current,
-          status: "failed",
-          error:
-            error instanceof Error ? error.message : "lost the orchestrator",
-        }));
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => window.clearInterval(timer);
-  }, [view.status, liveBackend]);
-
-  const submitAnswer = useCallback(async () => {
-    const text = answer.trim();
-    if (!text) return;
-    setAnswer("");
-
-    const demo = demoRef.current;
-    if (!liveBackend && demo) {
-      demo.answer(text);
-      setView({
-        status: demo.finished ? "complete" : "running",
-        steps: demo.steps,
-        trace: demo.finished ? demo.trace : null,
-      });
-      return;
-    }
-
-    const runId = runIdRef.current;
-    if (!runId) return;
-
-    try {
-      await orchestrator.postAnswer(runId, text);
-      setView((current) => ({
-        ...current,
-        status: "running",
-        pendingQuestion: undefined,
-      }));
-    } catch (error) {
-      setView((current) => ({
-        ...current,
-        status: "failed",
-        error:
-          error instanceof Error ? error.message : "could not send the answer",
-      }));
-    }
-  }, [answer, liveBackend]);
-
-  const busy = view.status === "running" || view.status === "awaiting_human";
-
   return (
-    <div className="grid gap-8 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
-      <div className="space-y-4 lg:sticky lg:top-24">
-        <ModeBanner live={liveBackend} />
-        <RequestForm
-          onSubmit={startCase}
-          disabled={busy}
-          liveBackend={liveBackend}
+    <div className="grid gap-8 lg:grid-cols-[24rem_minmax(0,1fr)] lg:items-start">
+      <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+        <ModeBanner
+          connection={connection}
+          replayRecordedWith={replaying?.recordedWith ?? null}
+          onSkip={skip}
+          onRetry={retry}
+          onWatchGemma={() => replay(RECORDED_CASES["bolognese-celery"])}
+        />
+        {view.phase === "awaiting_human" && <PendingKitchen onReset={reset} />}
+        <CasePicker
+          disabled={waiting || checking}
+          checking={checking}
+          liveMode={liveMode}
+          onPreset={(preset) => {
+            start({ text: preset.text }, preset.replayId);
+            reveal();
+          }}
+          onRequest={(request) => {
+            start(request);
+            reveal();
+          }}
         />
       </div>
 
-      <section aria-live="polite">
-        {view.status === "idle" ? (
+      <section
+        ref={traceRef}
+        aria-live="polite"
+        aria-label="Agent trace"
+        className="scroll-mt-20"
+      >
+        {view.phase === "idle" ? (
           <EmptyState />
         ) : (
-          <article className="mx-auto w-full max-w-2xl">
-            <div className="ticket-edge" aria-hidden="true" />
-            <div className="bg-paper text-ink px-6 py-7 sm:px-9">
-              <ol className="divide-ink/15 divide-y">
-                {view.steps.map((step) => (
-                  <TicketLine key={step.n} step={step} />
-                ))}
-              </ol>
-
-              {view.status === "running" && <Working />}
-
-              {view.status === "awaiting_human" && view.pendingQuestion && (
-                <KitchenPrompt
-                  question={view.pendingQuestion}
-                  value={answer}
-                  onChange={setAnswer}
-                  onSubmit={submitAnswer}
-                />
-              )}
-
-              {view.status === "failed" && (
-                <p className="text-refuse border-refuse mt-5 border-l-2 pl-3 font-mono text-sm">
-                  The run stopped: {view.error ?? "unknown error"}. Nothing is
-                  cleared on a failed run.
-                </p>
-              )}
-
-              {view.status === "complete" && view.trace && (
-                <Outcome trace={view.trace} />
-              )}
-            </div>
-            <div
-              className="ticket-edge ticket-edge-bottom"
-              aria-hidden="true"
-            />
-          </article>
+          <Ticket
+            view={view}
+            onAnswer={answerKitchen}
+            onReplay={() => startReplay(closestFor(view))}
+            onReconnect={() => {
+              retry();
+              reconnect();
+            }}
+          />
         )}
       </section>
     </div>
   );
 }
 
-function ModeBanner({ live }: { live: boolean }) {
+/** A case is parked on the kitchen: say so, and let the operator move on. */
+function PendingKitchen({ onReset }: { onReset: () => void }) {
   return (
-    <p
-      className={`border px-3 py-2 font-mono text-xs leading-5 ${
-        live
-          ? "border-verified text-verified"
-          : "border-confirm text-confirm-lit"
-      }`}
-    >
-      {live
-        ? "Live — Gemma 4 E2B is hearing and reasoning on this machine."
-        : "Demo mode — replaying a recorded case. The kitchen question is still yours to answer."}
-    </p>
+    <div className="border-pen-lit border px-3 py-3" role="status">
+      <p className="text-pen-lit font-mono text-xs leading-5 font-semibold">
+        Waiting on the kitchen
+      </p>
+      <p className="text-muted-foreground mt-1.5 text-xs leading-5">
+        The ticket needs the chef&apos;s answer. Picking another case drops this
+        one.
+      </p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="border-console-line text-paper hover:border-paper mt-2 flex min-h-11 items-center gap-2 border px-3 font-mono text-xs tracking-wider uppercase"
+      >
+        <RotateCcw className="size-4" aria-hidden="true" />
+        Start a new case
+      </button>
+    </div>
   );
 }
 
-function EmptyState() {
+/** The recording closest to a failed live run, for the fallback button. */
+function closestFor(view: RunView) {
+  return view.source?.kind === "replay"
+    ? view.source.recording
+    : pickClosest(view.steps[0]?.result?.utterance);
+}
+
+/** Closest recording to whatever utterance the failed run heard. */
+function pickClosest(utterance: unknown) {
+  return closestRecording(typeof utterance === "string" ? utterance : "");
+}
+
+type TicketActions = {
+  onAnswer: ReturnType<typeof useVerifyRun>["answerKitchen"];
+  onReplay: () => void;
+  onReconnect: () => void;
+};
+
+/** The paper ticket: source badge, printed steps, kitchen, verdict. */
+function Ticket({
+  view,
+  onAnswer,
+  onReplay,
+  onReconnect,
+}: { view: RunView } & TicketActions) {
   return (
-    <div className="border-console-line flex min-h-80 items-center justify-center border border-dashed p-10">
-      <p className="text-muted-foreground max-w-sm text-center text-sm leading-6">
-        Say what the diner asked, in any language. Gemma works out the dish
-        and the restriction, the table decides what can honestly come out, and
-        the kitchen answers what no document can.
+    <article className="mx-auto w-full max-w-2xl">
+      <div className="ticket-edge" aria-hidden="true" />
+      <div className="bg-paper text-ink px-5 py-6 sm:px-9 sm:py-7">
+        <SourceBadge view={view} />
+        <ol className="divide-ink/15 divide-y">
+          {view.steps.map((step) => (
+            <TraceStepLine key={step.n} step={step} />
+          ))}
+        </ol>
+        <TicketTail
+          view={view}
+          onAnswer={onAnswer}
+          onReplay={onReplay}
+          onReconnect={onReconnect}
+        />
+      </div>
+      <div className="ticket-edge ticket-edge-bottom" aria-hidden="true" />
+    </article>
+  );
+}
+
+/** Whatever follows the printed steps for the phase the run is in. */
+function TicketTail({
+  view,
+  onAnswer,
+  onReplay,
+  onReconnect,
+}: { view: RunView } & TicketActions) {
+  if (view.phase === "running") return <Working />;
+  if (view.phase === "failed")
+    return (
+      <Failure view={view} onReplay={onReplay} onReconnect={onReconnect} />
+    );
+  if (view.phase === "complete" && view.trace)
+    return <RunOutcome trace={view.trace} />;
+  if (!view.pendingQuestion) return <Working />;
+  if (view.recordedKitchenStep) {
+    return (
+      <RecordedKitchenAnswer
+        question={view.pendingQuestion}
+        step={view.recordedKitchenStep}
+        onContinue={() => void onAnswer(null)}
+      />
+    );
+  }
+  return (
+    <KitchenPanel
+      question={view.pendingQuestion}
+      sending={view.phase === "answering"}
+      replay={view.source?.kind === "replay"}
+      onAnswer={(answer) => void onAnswer(answer)}
+    />
+  );
+}
+
+/** Says who is producing this ticket: the live agent or a named recording. */
+function SourceBadge({ view }: { view: RunView }) {
+  const source = view.source;
+  if (!source) return null;
+  const live = source.kind === "live";
+  const label = live
+    ? source.mode === "gemma"
+      ? "Live · Gemma 4 E2B"
+      : "Live · rules mode"
+    : recordedBadge(source.recording.recordedWith);
+  const Icon = live ? Radio : History;
+
+  return (
+    <header className="border-ink/20 mb-2 border-b pb-3">
+      <p
+        className={`inline-flex items-center gap-1.5 border-2 px-2 py-1 font-mono text-xs font-semibold tracking-wider uppercase ${
+          live
+            ? "border-verified text-verified-ink"
+            : "border-confirm text-confirm-ink"
+        }`}
+      >
+        <Icon className="size-3.5" aria-hidden="true" />
+        {label}
+      </p>
+      {source.kind === "replay" && <ReplayContext view={view} />}
+      {view.notice && source.kind === "live" && (
+        <p className="text-ink-muted mt-2 text-xs leading-5">{view.notice}</p>
+      )}
+    </header>
+  );
+}
+
+/** For a replay: what was recorded, and what was typed if it differs. */
+function ReplayContext({ view }: { view: RunView }) {
+  if (view.source?.kind !== "replay") return null;
+  const recording = view.source.recording;
+
+  return (
+    <div className="mt-2 text-xs leading-5">
+      {view.notice && (
+        <p className="text-confirm-ink font-mono font-semibold">{view.notice}</p>
+      )}
+      {view.typedRequest && (
+        <p className="text-ink-muted">
+          You asked: <span className="text-ink">“{view.typedRequest}”</span>
+        </p>
+      )}
+      <p className="text-ink-muted">
+        Recorded request:{" "}
+        <span className="text-ink">“{recording.request}”</span>
       </p>
     </div>
   );
 }
 
+/**
+ * A live run that stopped: nothing is cleared. If the case may still be going
+ * on the server it can be picked up again; a recording is always on offer.
+ */
+function Failure({
+  view,
+  onReplay,
+  onReconnect,
+}: {
+  view: RunView;
+  onReplay: () => void;
+  onReconnect: () => void;
+}) {
+  return (
+    <div className="border-refuse mt-5 border-l-2 pl-3">
+      <p className="text-refuse font-mono text-sm">
+        The run stopped: {view.error ?? "unknown error"}. Nothing is cleared on
+        a failed run.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {view.resumable && (
+          <button
+            type="button"
+            onClick={onReconnect}
+            className="border-ink text-ink min-h-11 border px-4 font-mono text-xs tracking-wider uppercase"
+          >
+            Reconnect to this case
+          </button>
+        )}
+        {view.offerReplay && (
+          <button
+            type="button"
+            onClick={onReplay}
+            className="bg-ink text-paper min-h-11 px-4 font-mono text-xs tracking-wider uppercase"
+          >
+            Watch the closest recorded run
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Before any case: what the four chips mean. */
+function EmptyState() {
+  return (
+    <div className="border-console-line flex min-h-80 flex-col justify-center gap-5 border border-dashed p-6 sm:p-10">
+      <p className="text-muted-foreground max-w-md text-sm leading-6">
+        Pick a case or type what the diner asked. Every line of the ticket says
+        which part of the system produced it. The model only hears and speaks;
+        code decides, and the kitchen answers what no document can.
+      </p>
+      <ul className="flex flex-wrap gap-2">
+        {(["model", "code", "serpapi", "human"] as const).map((kind) => (
+          <li key={kind}>
+            <KindChip kind={kind} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** The agent is working on the next line. */
 function Working() {
   return (
     <p className="text-ink-muted mt-5 font-mono text-xs" role="status">
-      agent working…
+      Agent working…
     </p>
-  );
-}
-
-function KitchenPrompt({
-  question,
-  value,
-  onChange,
-  onSubmit,
-}: {
-  question: string;
-  value: string;
-  onChange: (next: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <div className="border-pen mt-6 border-l-2 pl-4">
-      <p className="text-pen font-mono text-[0.7rem] tracking-wider uppercase">
-        The agent needs the kitchen
-      </p>
-      <p className="text-ink mt-2 font-semibold">{question}</p>
-      <p className="text-ink-muted mt-1 text-xs leading-5">
-        Walk it to the pass. Nothing is cleared until this is answered.
-      </p>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <input
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") onSubmit();
-          }}
-          placeholder="What the chef said"
-          aria-label="The kitchen's answer"
-          className="border-ink/30 text-ink placeholder:text-ink-muted min-h-12 min-w-0 flex-1 border bg-transparent px-3 text-base outline-none focus-visible:border-pen"
-        />
-        <button
-          type="button"
-          onClick={onSubmit}
-          className="bg-ink text-paper min-h-12 px-5 font-mono text-xs tracking-wider uppercase"
-        >
-          Send
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Outcome({ trace }: { trace: Trace }) {
-  const [showOriginal, setShowOriginal] = useState(true);
-  const verdict = VERDICT_PRESENTATION[trace.verdict];
-  const languageName =
-    LANGUAGE_NAMES[trace.diner_language] ?? trace.diner_language;
-  const rtl = isRtl(trace.diner_language);
-
-  return (
-    <>
-      <div
-        className={`stamping mt-7 border-[3px] px-4 py-3 text-center ${verdict.className}`}
-      >
-        <p className="font-display text-2xl font-bold tracking-tight uppercase sm:text-3xl">
-          {verdict.label}
-        </p>
-        <p className="text-ink-muted mt-1 text-xs">{verdict.consequence}</p>
-      </div>
-
-      <section className="mt-7">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h4 className="font-mono text-[0.7rem] tracking-[0.2em] uppercase">
-            Show the diner
-          </h4>
-          <div className="border-ink/25 flex border text-[0.7rem]">
-            <button
-              type="button"
-              onClick={() => setShowOriginal(true)}
-              aria-pressed={showOriginal}
-              className={`min-h-11 px-3 font-mono uppercase ${
-                showOriginal ? "bg-ink text-paper" : "text-ink-muted"
-              }`}
-            >
-              {languageName}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowOriginal(false)}
-              aria-pressed={!showOriginal}
-              className={`min-h-11 px-3 font-mono uppercase ${
-                !showOriginal ? "bg-ink text-paper" : "text-ink-muted"
-              }`}
-            >
-              English
-            </button>
-          </div>
-        </div>
-        <p
-          dir={showOriginal && rtl ? "rtl" : "ltr"}
-          lang={showOriginal ? trace.diner_language : "en"}
-          className="border-gemma bg-paper-shade/60 border-l-2 px-4 py-3 text-sm leading-7 whitespace-pre-line"
-        >
-          {showOriginal ? trace.explanation : trace.explanation_en}
-        </p>
-      </section>
-
-      <footer className="border-ink/25 text-ink-muted mt-7 flex flex-wrap gap-x-6 gap-y-1 border-t pt-4 font-mono text-[0.7rem]">
-        <span>{formatDuration(trace.total_ms)} total</span>
-        <span>{trace.steps.length} steps</span>
-        <span>{countGemmaSteps(trace)} by Gemma</span>
-        <span>{countForcedSteps(trace)} forced by the loop</span>
-      </footer>
-    </>
   );
 }

@@ -1,0 +1,611 @@
+{
+  "none": {
+    "case_id": "SP-D61D892C",
+    "restaurant": "SafePlate demo service",
+    "dish": "Falafel plate",
+    "allergen": "sesame",
+    "diner_language": "en",
+    "verdict": "verified",
+    "total_ms": 2,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "rule",
+        "title": "Rules read the typed request",
+        "reasoning": "No model on this host. The dish and the allergens are matched against the same tables the loop decides with; anything not recognised is left empty, so the loop asks instead of guessing.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "Can I get the falafel without sesame?",
+          "language": "en",
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ],
+          "request_type": "modification"
+        },
+        "duration_ms": 2,
+        "note": "Rules mode — keyword matching, no model."
+      },
+      {
+        "n": 2,
+        "tool": "assess_dish",
+        "engine": "rule",
+        "title": "The dish table decides what can come out",
+        "reasoning": "Whether an ingredient is structural is data, not generation. A small model guessing at culinary structure is exactly what this avoids.",
+        "forced": false,
+        "args": {
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ]
+        },
+        "result": {
+          "outcome": "modifiable",
+          "blocking": [],
+          "adjustable": [
+            {
+              "ingredient": "tahini sauce",
+              "role": "substitutable",
+              "substitute": "serve with harissa instead"
+            }
+          ],
+          "advisory": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "lookup_product",
+        "engine": "external",
+        "title": "SerpApi — what the manufacturer declares",
+        "reasoning": "'tahini sauce' arrives in a jar. What is actually in it is the manufacturer's declaration, not our table.",
+        "forced": true,
+        "args": {
+          "product": "tahini sauce"
+        },
+        "result": {
+          "statements": [
+            {
+              "source": "tahinis.com",
+              "url": "https://tahinis.com/nutritional-info/",
+              "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "foodpro.ucr.edu",
+              "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+              "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            },
+            {
+              "source": "recipetineats.com",
+              "url": "https://www.recipetineats.com/tahini-sauce/",
+              "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "justinecooksvegan.com",
+              "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+              "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "minimalistbaker.com",
+              "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+              "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            }
+          ],
+          "conflict": true,
+          "confirmed": false
+        },
+        "duration_ms": 0,
+        "forced_by": "a packaged ingredient matched the diner's request",
+        "note": "Sources disagree — but the tahini sauce is being left off or substituted, so the disagreement does not decide this case."
+      },
+      {
+        "n": 4,
+        "tool": "ask_kitchen",
+        "engine": "human",
+        "title": "The agent asks what no document can answer",
+        "reasoning": "Cross-contact is not written on any label and never will be. Before clearing anything, a human has to answer.",
+        "forced": true,
+        "args": {
+          "question": "Falafel plate: Prepare it with these changes: serve with harissa instead. Is there ANY way sesame could reach this plate — shared oil, fryer, board, utensils, or a pre-made component? Note: deep fryer shared with breaded and peanut-crusted items."
+        },
+        "result": {
+          "answered_by": "chef",
+          "answer": "none",
+          "risk": "none"
+        },
+        "duration_ms": 0,
+        "forced_by": "cross_contact unknown for the requested allergen"
+      },
+      {
+        "n": 5,
+        "tool": "interpret_answer",
+        "engine": "rule",
+        "title": "The kitchen's answer decides it",
+        "reasoning": "A human said what the documents could not. The verdict follows from that answer, not from the model's impression of it.",
+        "forced": false,
+        "args": {
+          "answer": "",
+          "risk": "none"
+        },
+        "result": {
+          "verdict": "verified"
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 6,
+        "tool": "compose_reply",
+        "engine": "rule",
+        "title": "Fixed sentences state the verdict, in English",
+        "reasoning": "No model on this host. The reply is assembled from the facts, with hand-checked safety sentences where the diner's language has them and English otherwise.",
+        "forced": false,
+        "args": {
+          "verdict": "verified",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "verified"
+        },
+        "duration_ms": 0
+      }
+    ],
+    "evidence": [
+      {
+        "source": "tahinis.com",
+        "url": "https://tahinis.com/nutritional-info/",
+        "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+        "trusted": false
+      },
+      {
+        "source": "foodpro.ucr.edu",
+        "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+        "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+        "trusted": false
+      },
+      {
+        "source": "recipetineats.com",
+        "url": "https://www.recipetineats.com/tahini-sauce/",
+        "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+        "trusted": false
+      },
+      {
+        "source": "justinecooksvegan.com",
+        "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+        "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+        "trusted": false
+      },
+      {
+        "source": "minimalistbaker.com",
+        "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+        "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+        "trusted": false
+      }
+    ],
+    "explanation": "The request can be met. Alternative: serve with harissa instead. The kitchen confirmed no risk of sesame on this plate.",
+    "explanation_en": "The request can be met. Alternative: serve with harissa instead. The kitchen confirmed no risk of sesame on this plate."
+  },
+  "risk": {
+    "case_id": "SP-C0D37D07",
+    "restaurant": "SafePlate demo service",
+    "dish": "Falafel plate",
+    "allergen": "sesame",
+    "diner_language": "en",
+    "verdict": "do_not_serve",
+    "total_ms": 2,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "rule",
+        "title": "Rules read the typed request",
+        "reasoning": "No model on this host. The dish and the allergens are matched against the same tables the loop decides with; anything not recognised is left empty, so the loop asks instead of guessing.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "Can I get the falafel without sesame?",
+          "language": "en",
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ],
+          "request_type": "modification"
+        },
+        "duration_ms": 2,
+        "note": "Rules mode — keyword matching, no model."
+      },
+      {
+        "n": 2,
+        "tool": "assess_dish",
+        "engine": "rule",
+        "title": "The dish table decides what can come out",
+        "reasoning": "Whether an ingredient is structural is data, not generation. A small model guessing at culinary structure is exactly what this avoids.",
+        "forced": false,
+        "args": {
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ]
+        },
+        "result": {
+          "outcome": "modifiable",
+          "blocking": [],
+          "adjustable": [
+            {
+              "ingredient": "tahini sauce",
+              "role": "substitutable",
+              "substitute": "serve with harissa instead"
+            }
+          ],
+          "advisory": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "lookup_product",
+        "engine": "external",
+        "title": "SerpApi — what the manufacturer declares",
+        "reasoning": "'tahini sauce' arrives in a jar. What is actually in it is the manufacturer's declaration, not our table.",
+        "forced": true,
+        "args": {
+          "product": "tahini sauce"
+        },
+        "result": {
+          "statements": [
+            {
+              "source": "tahinis.com",
+              "url": "https://tahinis.com/nutritional-info/",
+              "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "foodpro.ucr.edu",
+              "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+              "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            },
+            {
+              "source": "recipetineats.com",
+              "url": "https://www.recipetineats.com/tahini-sauce/",
+              "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "justinecooksvegan.com",
+              "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+              "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "minimalistbaker.com",
+              "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+              "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            }
+          ],
+          "conflict": true,
+          "confirmed": false
+        },
+        "duration_ms": 0,
+        "forced_by": "a packaged ingredient matched the diner's request",
+        "note": "Sources disagree — but the tahini sauce is being left off or substituted, so the disagreement does not decide this case."
+      },
+      {
+        "n": 4,
+        "tool": "ask_kitchen",
+        "engine": "human",
+        "title": "The agent asks what no document can answer",
+        "reasoning": "Cross-contact is not written on any label and never will be. Before clearing anything, a human has to answer.",
+        "forced": true,
+        "args": {
+          "question": "Falafel plate: Prepare it with these changes: serve with harissa instead. Is there ANY way sesame could reach this plate — shared oil, fryer, board, utensils, or a pre-made component? Note: deep fryer shared with breaded and peanut-crusted items."
+        },
+        "result": {
+          "answered_by": "chef",
+          "answer": "Falafel goes through the shared fryer",
+          "risk": "risk"
+        },
+        "duration_ms": 0,
+        "forced_by": "cross_contact unknown for the requested allergen"
+      },
+      {
+        "n": 5,
+        "tool": "interpret_answer",
+        "engine": "rule",
+        "title": "The kitchen's answer decides it",
+        "reasoning": "A human said what the documents could not. The verdict follows from that answer, not from the model's impression of it.",
+        "forced": false,
+        "args": {
+          "answer": "Falafel goes through the shared fryer",
+          "risk": "risk"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 6,
+        "tool": "compose_reply",
+        "engine": "rule",
+        "title": "Fixed sentences state the verdict, in English",
+        "reasoning": "No model on this host. The reply is assembled from the facts, with hand-checked safety sentences where the diner's language has them and English otherwise.",
+        "forced": false,
+        "args": {
+          "verdict": "do_not_serve",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "do_not_serve"
+        },
+        "duration_ms": 0
+      }
+    ],
+    "evidence": [
+      {
+        "source": "tahinis.com",
+        "url": "https://tahinis.com/nutritional-info/",
+        "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+        "trusted": false
+      },
+      {
+        "source": "foodpro.ucr.edu",
+        "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+        "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+        "trusted": false
+      },
+      {
+        "source": "recipetineats.com",
+        "url": "https://www.recipetineats.com/tahini-sauce/",
+        "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+        "trusted": false
+      },
+      {
+        "source": "justinecooksvegan.com",
+        "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+        "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+        "trusted": false
+      },
+      {
+        "source": "minimalistbaker.com",
+        "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+        "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+        "trusted": false
+      }
+    ],
+    "explanation": "We cannot serve this as requested. The kitchen says sesame could reach this plate. Kitchen note: “Falafel goes through the shared fryer”",
+    "explanation_en": "We cannot serve this as requested. The kitchen says sesame could reach this plate. Kitchen note: “Falafel goes through the shared fryer”"
+  },
+  "unsure": {
+    "case_id": "SP-427F877C",
+    "restaurant": "SafePlate demo service",
+    "dish": "Falafel plate",
+    "allergen": "sesame",
+    "diner_language": "en",
+    "verdict": "needs_confirmation",
+    "total_ms": 3,
+    "steps": [
+      {
+        "n": 1,
+        "tool": "understand_request",
+        "engine": "rule",
+        "title": "Rules read the typed request",
+        "reasoning": "No model on this host. The dish and the allergens are matched against the same tables the loop decides with; anything not recognised is left empty, so the loop asks instead of guessing.",
+        "forced": false,
+        "args": {
+          "input": "text"
+        },
+        "result": {
+          "utterance": "Can I get the falafel without sesame?",
+          "language": "en",
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ],
+          "request_type": "modification"
+        },
+        "duration_ms": 2,
+        "note": "Rules mode — keyword matching, no model."
+      },
+      {
+        "n": 2,
+        "tool": "assess_dish",
+        "engine": "rule",
+        "title": "The dish table decides what can come out",
+        "reasoning": "Whether an ingredient is structural is data, not generation. A small model guessing at culinary structure is exactly what this avoids.",
+        "forced": false,
+        "args": {
+          "dish": "falafel plate",
+          "avoid": [
+            "sesame"
+          ]
+        },
+        "result": {
+          "outcome": "modifiable",
+          "blocking": [],
+          "adjustable": [
+            {
+              "ingredient": "tahini sauce",
+              "role": "substitutable",
+              "substitute": "serve with harissa instead"
+            }
+          ],
+          "advisory": []
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 3,
+        "tool": "lookup_product",
+        "engine": "external",
+        "title": "SerpApi — what the manufacturer declares",
+        "reasoning": "'tahini sauce' arrives in a jar. What is actually in it is the manufacturer's declaration, not our table.",
+        "forced": true,
+        "args": {
+          "product": "tahini sauce"
+        },
+        "result": {
+          "statements": [
+            {
+              "source": "tahinis.com",
+              "url": "https://tahinis.com/nutritional-info/",
+              "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "foodpro.ucr.edu",
+              "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+              "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            },
+            {
+              "source": "recipetineats.com",
+              "url": "https://www.recipetineats.com/tahini-sauce/",
+              "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "justinecooksvegan.com",
+              "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+              "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+              "declares": [],
+              "trusted": false
+            },
+            {
+              "source": "minimalistbaker.com",
+              "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+              "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+              "declares": [
+                "sesame"
+              ],
+              "trusted": false
+            }
+          ],
+          "conflict": true,
+          "confirmed": false
+        },
+        "duration_ms": 0,
+        "forced_by": "a packaged ingredient matched the diner's request",
+        "note": "Sources disagree — but the tahini sauce is being left off or substituted, so the disagreement does not decide this case."
+      },
+      {
+        "n": 4,
+        "tool": "ask_kitchen",
+        "engine": "human",
+        "title": "The agent asks what no document can answer",
+        "reasoning": "Cross-contact is not written on any label and never will be. Before clearing anything, a human has to answer.",
+        "forced": true,
+        "args": {
+          "question": "Falafel plate: Prepare it with these changes: serve with harissa instead. Is there ANY way sesame could reach this plate — shared oil, fryer, board, utensils, or a pre-made component? Note: deep fryer shared with breaded and peanut-crusted items."
+        },
+        "result": {
+          "answered_by": "chef",
+          "answer": "unsure",
+          "risk": "unsure"
+        },
+        "duration_ms": 0,
+        "forced_by": "cross_contact unknown for the requested allergen"
+      },
+      {
+        "n": 5,
+        "tool": "interpret_answer",
+        "engine": "rule",
+        "title": "The kitchen's answer decides it",
+        "reasoning": "A human said what the documents could not. The verdict follows from that answer, not from the model's impression of it.",
+        "forced": false,
+        "args": {
+          "answer": "",
+          "risk": "unsure"
+        },
+        "result": {
+          "verdict": "needs_confirmation"
+        },
+        "duration_ms": 0
+      },
+      {
+        "n": 6,
+        "tool": "compose_reply",
+        "engine": "rule",
+        "title": "Fixed sentences state the verdict, in English",
+        "reasoning": "No model on this host. The reply is assembled from the facts, with hand-checked safety sentences where the diner's language has them and English otherwise.",
+        "forced": false,
+        "args": {
+          "verdict": "needs_confirmation",
+          "language": "en"
+        },
+        "result": {
+          "verdict": "needs_confirmation"
+        },
+        "duration_ms": 0
+      }
+    ],
+    "evidence": [
+      {
+        "source": "tahinis.com",
+        "url": "https://tahinis.com/nutritional-info/",
+        "text": "Delicious and crispy falafels served with tahini or your favourite dip — available in both six-piece and twelve-piece portions.",
+        "trusted": false
+      },
+      {
+        "source": "foodpro.ucr.edu",
+        "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+        "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt … cause allergic reactions. These allergens ...",
+        "trusted": false
+      },
+      {
+        "source": "recipetineats.com",
+        "url": "https://www.recipetineats.com/tahini-sauce/",
+        "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 – 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+        "trusted": false
+      },
+      {
+        "source": "justinecooksvegan.com",
+        "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+        "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: · Tahini · Lime Juice · Coconut Aminos (my favorite secret ingredient, ...",
+        "trusted": false
+      },
+      {
+        "source": "minimalistbaker.com",
+        "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+        "text": "Ingredients · 1/2 cup tahini (from raw or roasted sesame seeds) · 1/4 tsp tsp sea salt (plus more to taste) · 1/4 tsp garlic powder · 1/4 cup warm water (plus more ...",
+        "trusted": false
+      }
+    ],
+    "explanation": "We cannot confirm this yet. Alternative: serve with harissa instead. The kitchen could not confirm that sesame stays off this plate.",
+    "explanation_en": "We cannot confirm this yet. Alternative: serve with harissa instead. The kitchen could not confirm that sesame stays off this plate."
+  }
+}
