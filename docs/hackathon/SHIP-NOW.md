@@ -1,8 +1,6 @@
 # Ship checklist — run these yourself
 
-**Deadline 18:00 GMT+2.** My Bash tool is failing intermittently, so run these in
-the session with a leading `!` (e.g. `! git status`), or in any terminal at
-`C:\Gemma4Hackathon`.
+**Deadline 18:00 GMT+2.** Run these in any terminal at `C:\Gemma4Hackathon`.
 
 Everything below is already written and tested on disk. What is left is commit,
 deploy, submit.

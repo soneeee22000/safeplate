@@ -1,528 +1,311 @@
 # SafePlate
 
-**An allergen agent that routes around failure — and refuses when it can't be sure.**
+**The model hears and speaks. The code decides.** An allergen agent for restaurant servers
+that refuses when it cannot be sure.
 
-[![License](https://img.shields.io/github/license/RitaTY/gemma4?style=flat-square)](LICENSE)
-[![Model](https://img.shields.io/badge/Gemma%204-E2B%20local-1a73e8?style=flat-square)](https://ollama.com/library/gemma4)
-[![Runtime](https://img.shields.io/badge/runtime-Ollama-000000?style=flat-square)](https://ollama.com)
-[![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square)](https://python.org)
-[![Last commit](https://img.shields.io/github/last-commit/RitaTY/gemma4?style=flat-square)](https://github.com/RitaTY/gemma4/commits/main)
+The hosted demo runs in rules mode: fixed rules stand in for the model. Gemma 4 E2B runs on a
+laptop, and its recorded runs are replayed on the site with a badge saying so.
 
-A customer asks, in a language the server doesn't speak, whether a dish contains nuts. The
-server has thirty seconds, a jar labelled in another language, and a legal obligation not to
-guess.
+[![License](https://img.shields.io/github/license/soneeee22000/safeplate?style=flat-square)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square)](pyproject.toml)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square)](web/package.json)
+[![Tests](https://img.shields.io/badge/tests-286%20passing-2e7d32?style=flat-square)](tests)
+[![Model](https://img.shields.io/badge/Gemma%204-E2B-1a73e8?style=flat-square)](safeplate/config.py)
 
-SafePlate checks the dish against its label — transcribed once, verbatim, into data — maps
-ingredients to the EU's 14 declarable allergens, looks up the manufacturer's declaration when the label doesn't resolve, **asks the
-kitchen the one thing no label can tell it**, and answers in the diner's language — or refuses,
-and says exactly why. Its most valuable output is often `DO NOT SERVE — I can't confirm`.
+**[Live demo (rules mode — Gemma runs locally)](https://safeplate-ten.vercel.app/verify)** ·
+**[Code](https://github.com/soneeee22000/safeplate)**
 
-Built for the **Gemma 4 Hackathon | Paris**, Track 2 (Autonomous Agents), 42 Paris.
+[![A pad thai case on /verify: five steps print, the SerpApi step lists its sources, and the ticket is stamped DO NOT SERVE](docs/media/verify-padthai-preview.gif)](https://safeplate-ten.vercel.app/verify)
 
-### Try it
+<sub>A rules-mode run at real speed: 4 ms of engine time, about 915 ms in the browser including
+the network round trip and rendering. Capture notes are [below](#about-the-recordings).</sub>
 
-|                      |                                                                                                                |
-| -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Operator console** | **<https://safeplate-ten.vercel.app/verify>** — open a case, watch the agent work, answer the kitchen yourself |
-| **Project page**     | <https://safeplate-ten.vercel.app>                                                                             |
+**SerpApi recognition award** — Gemma 4 Hackathon Paris, 42 Paris, Track 2 (Autonomous Agents).
 
-> These pages **replay a recorded run**. They are genuinely interactive — the trace prints step
-> by step and the kitchen question waits for an answer you type — but Gemma is not executing
-> behind them. The model is 7.2 GB behind Ollama, so the agent itself runs on a laptop, not
-> on a web host. The interface says which mode it is in.
+## What it does
 
----
+A diner asks a server, in their own language, whether they can have a dish without something
+they are allergic to. SafePlate works out what was asked, checks the dish against deterministic
+tables of ingredients and the EU's 14 declarable allergens, looks up published declarations
+(retailer pages and product databases, found via SerpApi) when a jarred ingredient carries the
+allergen, and asks the kitchen the one question no document can answer. It then returns one
+of three verdicts — **DO NOT SERVE**, **NEEDS CONFIRMATION** or **CAN SERVE WITH
+CONFIRMATION** — with the reason, in the diner's language where that is safe.
+It never says a dish is safe by default: a clearance only exists after a person in the kitchen
+has ruled the risk out.
 
-## The design decision
+![The landing page: "The model hears and speaks. The code decides." beside a ticket stamped DO NOT SERVE](docs/media/landing-hero.png)
 
-**Gemma 4 hears, understands and speaks. Deterministic tables decide whether anyone can eat
-the food.**
+## Why the model doesn't decide
 
-| Gemma 4 E2B owns                                | The tables own                                     |
-| ----------------------------------------------- | -------------------------------------------------- |
-| Hearing the diner — audio in, any language      | **Whether an ingredient is a declarable allergen** |
-| Turning that into `{dish, avoid, request_type}` | Whether it can be removed from the dish            |
-| Choosing which tool to call next                | `casein → milk`, `pignons de pin → advisory`       |
-| Saying the answer in the diner's own language   | Whether the verdict may ever be "safe"             |
+Each rule below exists because of something observed while building this, not a hypothetical.
+"Escalate" means handing the decision to a refusal or to a person.
 
-A language model is never the last line of defence. The reasoning is learned; the safety call
-is deterministic and auditable.
+| What I saw                                                                                                                                  | What the code does                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| During development, handed `do_not_serve` for pad thai, Gemma wrote _"We can offer you the Pad Thai without any added fish sauce instead."_ | A deterministic check discards any reply that offers the refused dish back ([`voice.py`](safeplate/voice.py#L197)).              |
+| In a tool-calling gate test, Gemma 4 E2B answered what it knew about an unresolved ingredient and stopped. It did not escalate on its own.  | Escalation is control flow: the lookup, the kitchen question and every refusal are forced ([`loop.py`](safeplate/loop.py#L257)). |
+| Ollama's native `/api/chat` silently drops audio; the OpenAI-compatible `/v1` endpoint delivers `input_audio`.                              | Speech goes to `/v1/chat/completions` ([`speech.py`](safeplate/speech.py#L27)).                                                  |
+| Gemma's vision could not read a printed ingredient label; Tesseract could.                                                                  | OCR was later removed: labels are transcribed once, verbatim, into data ([`menu_symphony.py`](safeplate/menu_symphony.py#L22)).  |
+| Safety decisions (the assess and escalate steps) take under 1 ms. Recorded Gemma runs take about 55 s on a laptop.                          | The minute is spent hearing and speaking. Handing the decision to a model that re-offers refused dishes would buy nothing.       |
 
----
+The Gemma re-offer is kept as a regression test, with the sentence as a fixed input
+([`tests/test_compose_engine.py`](tests/test_compose_engine.py)); no log of the original run was
+saved. The 55 s figure is the median of six recorded runs committed at `b5a3bb3` (46–74 s, one
+at 128 s). The four of those still in [`symphony-cases.json`](web/src/data/symphony-cases.json)
+have a median of 51 s, and a separate recording in
+[`fixtures/trace-verified.json`](fixtures/trace-verified.json) took 100 s.
 
-## One run, turn by turn
+**Where in the code.** The SerpApi lookup is forced when a jarred ingredient carries the diner's
+allergen ([`loop.py:257`](safeplate/loop.py#L257)). The kitchen question is asked before
+anything clears ([`loop.py:466`](safeplate/loop.py#L466)). Every refusal goes through
+[`_forced_escalate`](safeplate/loop.py#L506). A reply that fails `contradicts_refusal` is
+replaced by fixed sentences, translated and checked again
+([`voice.py:245`](safeplate/voice.py#L245)). Audio is sent as an `input_audio` part
+([`speech.py:229`](safeplate/speech.py#L229)).
 
-This is a real trace, replayed from `fixtures/`. Nothing below is illustrative.
-
-> **Diner** — spoken, in French
-> _« Je suis allergique au poisson. Vous pouvez faire le pad thaï sans nuoc-mâm ? »_
-
-**Turn 1 · `understand_request` · GEMMA · 29.2 s**
-
-Audio goes straight into Gemma. One call transcribes _and_ extracts intent, so "without the
-nuoc-mâm" resolves against the dish it just heard named:
-
-```json
-{
-  "language": "fr",
-  "dish": "pad thai",
-  "avoid": ["fish", "nuoc-mam"],
-  "request_type": "modification"
-}
-```
-
-**Turn 2 · `assess_dish` · RULE · <1 ms**
-
-The model is not asked whether this is safe. A table is:
-
-```json
-{
-  "outcome": "cannot_modify",
-  "blocking": [{ "ingredient": "fish sauce", "role": "structural" }]
-}
-```
-
-**Turn 3 · `lookup_product` · SERPAPI · FORCED**
-
-Fish sauce arrives in a jar, so what is in it is the manufacturer's declaration, not our
-table. The orchestrator compels this call — the model would skip it.
-
-**Turn 4 · `escalate` · RULE · FORCED**
-
-`forced_by: structural ingredient cannot be removed`. There is no path from here to "safe".
-
-**Turn 5 · `compose_reply` · GEMMA · 57.4 s**
-
-The verdict was fixed before this ran. Gemma's only job is to say it clearly, in French:
-
-> _« Nous ne pouvons pas servir ceci comme demandé. La sauce de poisson est le sel et l'épine
-> dorsale du pad thaï… Nous pouvons suggérer autre chose du menu. »_
-
-**Five turns. Two by Gemma, two forced by the loop, one sub-millisecond table lookup that made
-the actual decision.**
-
----
-
-## The turn that is not a turn
-
-Some questions have no document that answers them. Cross-contact is one:
-
-> **Agent → kitchen**
-> _"Falafel plate: can you do it as — serve with harissa instead? And is there cross-contact
-> with sesame? Note: deep fryer shared with breaded and peanut-crusted items."_
->
-> **Chef** — typed on the same screen
-> _"Yes — dedicated pan, no sesame at that station, clean utensils."_
->
-> **Agent → diner**
-> _"The falafel plate can be prepared without sesame. The kitchen uses a dedicated pan…"_
-
-The run **blocks** here. `status: awaiting_human`, and nothing is cleared until a person
-answers. Every question is phrased so **"yes" means risk** — two questions with opposite
-polarity cannot share one reading of the answer, and getting that backwards clears a dish
-that should be refused.
-
-Risk beats clearance whenever both appear. _"No shellfish in it but we share the oil"_ is a
-refusal.
+A kitchen answer is read fail-closed too. The buttons map straight to verdicts
+([`RISK_VERDICTS`](safeplate/loop.py#L521)); free text only clears on a short, unhedged "no"
+that names no allergen the diner avoids, and anything else stays NEEDS CONFIRMATION
+([`_classify_answer`](safeplate/loop.py#L657)).
 
 ## Architecture
 
+![The landing section "Three layers. Only one of them decides.", with Model, Code and Human lanes](docs/media/layers.png)
+
+The loop is [`safeplate/loop.py`](safeplate/loop.py). Every box marked FORCED is a branch the
+model cannot skip.
+
+<details>
+<summary>Full control flow</summary>
+
 ```mermaid
 flowchart TD
-    HEAR["understand_request<br/>Gemma 4 E2B, or keyword rules"] -->|no dish, no allergen,<br/>or an allergen not recognised| HOLD
-    HEAR -->|Symphony tray| LABEL["read_label<br/>rule over the transcribed label"]
-    HEAR -->|table dish| ASSESS["assess_dish<br/>EU-14 table + dish roles, deterministic"]
-    LABEL -->|allergen on the label| STOP
-    LABEL -->|advisory, or workshop line covers it| HOLD["escalate<br/>NEEDS CONFIRMATION"]
-    LABEL -->|label and workshop line silent| ASK
-    ASSESS -->|packaged ingredient| LOOKUP["FORCED: lookup_product<br/>SerpApi"]
-    ASSESS -->|structural ingredient| STOP["escalate<br/>DO NOT SERVE"]
-    ASSESS -->|advisory ingredient| HOLD
-    ASSESS -->|adjustable or clean| ASK["FORCED: ask_kitchen<br/>cross-contact, a human answers"]
-    LOOKUP -->|sources conflict on an<br/>ingredient that stays| STOP
-    LOOKUP --> ASSESS
-    ASK -->|any risk| STOP
-    ASK -->|hedged or unclear| HOLD
-    ASK -->|a plain, unconditional no| CARD["verdict + evidence trace<br/>in the diner's language"]
+    D(["Diner: typed or spoken request"]) --> U["understand_request<br/>MODEL: Gemma 4 E2B<br/>rules mode: keyword intake"]
+    U -->|"no dish, no allergen, or an allergen not recognised"| E
+    U -->|"sealed tray"| L["read_label<br/>CODE: transcribed label"]
+    U -->|"cooked dish"| A["assess_dish<br/>CODE: dish table + EU-14"]
+    A -->|"dish not in the table"| E
+    A -->|"jarred ingredient carries the allergen"| S["lookup_product (FORCED)<br/>SERPAPI: published declarations"]
+    A -->|"no jarred match"| X{"structural? sources disagree?<br/>advisory ingredient?<br/>CODE"}
+    S --> X
+    X -->|"yes"| E["escalate (FORCED)<br/>CODE: DO NOT SERVE or NEEDS CONFIRMATION"]
+    X -->|"no"| K["ask_kitchen (FORCED)<br/>HUMAN: No risk / Risk / Unsure"]
+    L -->|"label conflict or workshop declaration"| E
+    L -->|"label silent on the allergen"| K
+    K --> I["interpret_answer<br/>CODE: fail-closed reading"]
+    I --> C["compose_reply<br/>MODEL: Gemma writes the reply<br/>rules mode: fixed sentences"]
+    E --> C
+    C --> G{"contradicts_refusal?<br/>CODE"}
+    G -->|"yes: prose discarded"| F["fixed sentences<br/>translated by Gemma, checked again"]
+    G -->|"no"| R(["Verdict and reply for the diner"])
+    F --> R
 
-    style STOP fill:#f6e2e0,stroke:#a02f28,color:#111
-    style HOLD fill:#f7efdc,stroke:#8a6412,color:#111
-    style CARD fill:#e0efe6,stroke:#176b45,color:#111
-    style ASSESS fill:#eef1f5,stroke:#2a4c99,color:#111
-    style ASK fill:#e8e9f7,stroke:#1f3a93,color:#111
+    classDef model fill:#e8f0fe,stroke:#1a73e8,color:#0b3d91
+    classDef code fill:#f1f3f4,stroke:#5f6368,color:#202124
+    classDef human fill:#fef7e0,stroke:#b06000,color:#5c3b00
+    classDef serp fill:#e6f4ea,stroke:#1e8e3e,color:#0d652d
+    class U,C model
+    class A,L,X,E,I,G,F code
+    class K human
+    class S serp
 ```
 
-Everything except `lookup_product` runs on-device. Every branch marked **FORCED** is compelled
-by the orchestrator, not chosen by the model — see
-[Escalation is enforced by the loop](#escalation-is-enforced-by-the-loop-not-by-the-model).
-
-**`ask_kitchen` is the step that makes this more than a label reader.** A clean label never
-clears a dish on its own, because cross-contact is not written on any label and never will be.
-
-## System layers
-
-Where each part runs, and what crosses a network boundary.
-
-```mermaid
-flowchart TB
-    subgraph Diner["Diner's screen — table or kiosk"]
-        ORDER["/order<br/>speak or type · 4 scripts"]
-    end
-
-    subgraph Staff["Staff device"]
-        VERIFY["/verify<br/>trace + kitchen prompt"]
-    end
-
-    subgraph Service["FastAPI orchestrator — local"]
-        LOOP["Agent loop<br/>forced escalation<br/>never returns 'safe' unearned"]
-        GUARD["Refusal guardrail<br/>checks the model's own prose"]
-    end
-
-    subgraph Device["On-device — nothing leaves the machine"]
-        GEMMA["Gemma 4 E2B via Ollama<br/>/v1 chat · input_audio · temp 0"]
-        MENU["Symphony labels<br/>+ EU-14 table + synonyms<br/>DATA, not a prompt"]
-    end
-
-    subgraph Human["Not a system"]
-        CHEF["The kitchen"]
-    end
-
-    subgraph Ext["External"]
-        SERP["SerpApi<br/>manufacturer declarations<br/>cached to disk"]
-    end
-
-    ORDER -->|audio or text| LOOP
-    VERIFY -->|audio or text| LOOP
-    LOOP --> GEMMA
-    LOOP --> MENU
-    LOOP -->|FORCED| SERP
-    LOOP -->|FORCED · run blocks| CHEF
-    CHEF -->|answer| LOOP
-    LOOP --> GUARD
-    GUARD -->|verdict + evidence + trace| ORDER
-    GUARD -->|verdict + evidence + trace| VERIFY
-
-    GEMMA -.->|hears · plans · speaks| LOOP
-    MENU -.->|decides| LOOP
-
-    style MENU fill:#eef1f5,stroke:#2a4c99,color:#111
-    style CHEF fill:#e8e9f7,stroke:#1f3a93,color:#111
-    style GUARD fill:#f6e2e0,stroke:#a02f28,color:#111
-```
-
-**Only `lookup_product` crosses the internet.** The model and every safety decision stay on
-the machine — no diner's health information is sent anywhere.
-
-## A run, as a sequence
-
-The vegan gnocchi case, exactly as the loop executes it.
-
-```mermaid
-sequenceDiagram
-    actor D as Diner
-    participant L as Orchestrator
-    participant G as Gemma 4 E2B
-    participant M as Symphony labels
-    participant W as SerpApi
-    actor K as Kitchen
-
-    D->>L: audio — "I have a tree nut allergy.<br/>Is the gnocchis pesto vegan safe?"
-    L->>G: understand_request(audio)
-    G-->>L: {dish, avoid:[tree nuts], language} — 25s
-
-    alt avoid is empty
-        Note over L: FORCED — a dish cannot be<br/>checked against nothing
-        L-->>D: needs_confirmation, ask again
-    end
-
-    L->>M: report(dish, avoid)
-    M-->>L: advisory — pignons de pin<br/>not an EU-14 allergen, ask
-
-    alt packaged ingredient
-        Note over L: FORCED by the loop,<br/>not chosen by the model
-        L->>W: lookup_product(product)
-        W-->>L: statements[] or unavailable
-    end
-
-    alt nothing on the label, workshop line silent
-        Note over L: FORCED — run BLOCKS here
-        L->>K: is there ANY way X reaches this plate?
-        K-->>L: free text — risk beats clearance
-    end
-
-    L->>G: compose_reply(verdict, language)
-    G-->>L: prose
-
-    alt prose offers the refused dish
-        Note over L: guardrail discards it,<br/>assembles from facts, translates
-    end
+</details>
 
-    L-->>D: NEEDS CONFIRMATION + the reason,<br/>in the diner's language
-```
-
-**Every `FORCED` note is this file's control flow, not the model's judgement.** That is the
-whole architecture in one word, repeated four times.
-
-## Verdict states
+## One run, turn by turn
 
-There are three, and one of them is unreachable for most questions at Symphony.
+Both runs below are committed and replayed by the site. Nothing is illustrative.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Understanding
-    Understanding --> NeedsConfirmation: no dish named
-    Understanding --> NeedsConfirmation: no allergen understood
-    Understanding --> Checking: dish + allergen known
+### Rules mode: pad thai, allergic to fish
 
-    Checking --> DoNotServe: on the label
-    Checking --> NeedsConfirmation: workshop declares it
-    Checking --> AwaitingHuman: label silent
+[`web/src/data/trace-padthai-rules.json`](web/src/data/trace-padthai-rules.json), case
+`SP-A9F8DB20`. The diner typed: _"I'm allergic to fish — can I have the pad thai without fish
+sauce?"_
 
-    AwaitingHuman --> DoNotServe: risk confirmed
-    AwaitingHuman --> NeedsConfirmation: answer unclear
-    AwaitingHuman --> Verified: risk ruled out by a person
+| #   | Step                        | Engine  | Time          | Result                                                                                        |
+| --- | --------------------------- | ------- | ------------- | --------------------------------------------------------------------------------------------- |
+| 1   | `understand_request`        | rule    | 3 ms          | dish `pad thai`, avoid `["fish", "fish sauce"]`, request type `modification`                  |
+| 2   | `assess_dish`               | rule    | 0 ms          | `cannot_modify`: fish sauce is `structural`                                                   |
+| 3   | `lookup_product` **FORCED** | SerpApi | 0 ms (cached) | 5 sources, 1 trusted (`world.openfoodfacts.org`, declares fish); `conflict: true` (see below) |
+| 4   | `escalate` **FORCED**       | rule    | 0 ms          | forced by _"structural ingredient cannot be removed"_ → `do_not_serve`                        |
+| 5   | `compose_reply`             | rule    | 0 ms          | fixed sentences, in English                                                                   |
 
-    DoNotServe --> [*]
-    NeedsConfirmation --> [*]
-    Verified --> [*]
+`total_ms: 4`. The reply the diner reads:
 
-    note right of Verified
-        Only reachable when a human
-        ruled the risk out. No label,
-        and no model, can reach it alone.
-    end note
-```
+> We cannot serve this as requested. Fish sauce is the salt and the backbone of pad thai.
+> Without it the dish has no seasoning base — it is not a garnish that can be left off. The
+> fish sauce cannot be left out, so this dish is not possible for you. We can suggest something
+> else from the menu.
 
-Every Symphony label carries the same workshop declaration — gluten, celery, mustard,
-peanuts, fish, eggs, soya, milk, tree nuts, sesame. **For any of those ten, `Verified` is
-unreachable by construction.** That is not a limitation to design around; it is the
-manufacturer declining to guarantee, and the agent declining to guarantee on their behalf.
+The lookup ran from [`fixtures/serp/`](fixtures/serp), SerpApi results normalised and cached, so
+it needs no key. Cached evidence exists for fish sauce, tahini and tamarind paste.
 
-## Who it's for
+The `conflict` flag here is weak evidence. The trusted source and a retailer both declare fish.
+The source that is silent on fish is an untrusted restaurant menu page that does not describe
+this product; the conflict rule counts untrusted pages because a conflict can only ever refuse.
+The refusal itself came from the structural rule in step 4, not from the conflict.
 
-```mermaid
-flowchart LR
-    S(["SERVER<br/>the only operator"])
-    K(["CHEF<br/>answers one question"])
-    D(["DINER<br/>receives, never operates"])
+![The pad thai ticket at the verdict: five steps, the SerpApi sources marked TRUSTED or UNTRUSTED, and the DO NOT SERVE stamp](docs/media/verify-padthai-verdict.png)
 
-    U1["Open a case:<br/>allergen + language"]
-    U2["Pick the dish<br/>from the menu"]
-    U3["Answer the agent's<br/>cross-contact question"]
-    U4["Receive the verdict<br/>in their own language"]
+### Gemma mode: bolognese, in French, allergic to celery
 
-    S --> U1
-    S --> U2
-    K --> U3
-    U4 --> D
+[`web/src/data/symphony-cases.json`](web/src/data/symphony-cases.json), case `SP-DEMO-06`,
+recorded on a laptop with Gemma 4 E2B. The diner typed: _"Je suis allergique au celeri. Les
+pates bolognaises, c'est possible ?"_
 
-    U2 -. triggers .-> U3
-    U3 -. resolves .-> U4
-```
+| #   | Step                  | Engine | Time      | Result                                                                                |
+| --- | --------------------- | ------ | --------- | ------------------------------------------------------------------------------------- |
+| 1   | `understand_request`  | Gemma  | 20,065 ms | language `fr`, dish `pasta bolognese`, avoid `["celery"]`                             |
+| 2   | `read_label`          | rule   | 0 ms      | `label_conflict`: `céleri`, declared in bold; workshop declaration also covers celery |
+| 3   | `escalate` **FORCED** | rule   | 0 ms      | forced by _"the label declares it outright"_ → `do_not_serve`                         |
+| 4   | `compose_reply`       | Gemma  | 54,092 ms | written in French, verdict fixed before it ran                                        |
 
-**One device, one screen, three people served.** The server holds the phone. The chef answers on
-that same screen — there is no second app. The diner never touches it.
+`total_ms: 74157`. Gemma's reply, and its English version from the same run:
 
-A server holding a jar has no allergen training, no time, and often no shared language with the
-person asking. Today the options are guess, refuse everything, or go find a chef. All three are
-bad — and the first is the one that sends people to hospital.
+> Nous ne pouvons pas servir ce plat comme demandé. Le céleri fait partie de la base de la sauce
+> bolognaise et est donc essentiel à cette recette. Je peux vous proposer une autre option.
+>
+> _We cannot serve the pâtes bolognaises as requested. Celery is an essential part of the
+> seasoning base for this dish. Because it is incorporated into the sauce, we cannot prepare it
+> without it._
 
-SafePlate's job is not to be clever. It is to turn thirty seconds of guessing into a sourced
-answer, or an honest refusal that a manager can stand behind.
-
-## Why this matters commercially
-
-|                   |                                                                                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Who pays**      | Restaurant groups and hospitality franchises — the buyer is whoever signs off on food-safety compliance, not the kitchen                                    |
-| **Budget line**   | Food-safety training and compliance tooling, an existing line item                                                                                          |
-| **The wedge**     | Allergen declaration is legally mandated in the EU under Regulation (EU) No 1169/2011 — the 14 allergens are not optional, so the obligation already exists |
-| **Why on-device** | No per-query cost, no network dependency in a kitchen, no customer health data sent anywhere                                                                |
-| **Defensibility** | The moat is the verified allergen taxonomy and the refusal policy, not the model — anyone can call an LLM, few will build the part that says _no_           |
+Seventy-four seconds, and the only part that decided anything took 0 ms.
 
-**Stated honestly:** this is a hackathon prototype, not a validated product. Market size,
-willingness to pay, and per-restaurant liability exposure are **assumptions we have not
-tested** — no operator has been interviewed. The strongest evidence we have is that the legal
-obligation is real and the current alternative is a server guessing.
+When the kitchen has to answer, the run stops and waits for a person:
 
-## Escalation is enforced by the loop, not by the model
+![Falafel, allergic to sesame: the agent stops and asks the kitchen, with No risk, Risk and Unsure buttons](docs/media/verify-falafel-kitchen.png)
 
-We measured this rather than assuming it. Given ingredients including `casein` and the
-unresolved token `natural flavourings`, Gemma 4 E2B correctly called `match_allergens` — but
-handed back `"unresolved": ["natural flavourings"]`, **it did not escalate.** It answered about
-the casein and stopped.
+## Two modes
 
-So escalation is control flow, not a hope:
+The safety decisions are the same code in both. Only hearing and speaking change
+([`safeplate/config.py:36`](safeplate/config.py#L36)).
 
-```python
-if assessment.unknown_dish:   force("escalate")        # not "if the model decides to"
-if not intent.avoid:          force("escalate")        # nothing to check is not a pass
-if packaged_ingredient:       force("lookup_product")
-if assessment.blocking:       force("escalate")
-if clearable:                 force("ask_kitchen")     # always. a clean label clears nothing alone
-```
+|         | Gemma mode (local)                                                                  | Rules mode (hosted demo)                                                                                 |
+| ------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Hears   | Gemma 4 E2B (~2B effective, 7.2 GB via Ollama): audio or text, the diner's language | Keyword matching over the same tables ([`intake_rules.py`](safeplate/intake_rules.py)), typed text only  |
+| Speaks  | Gemma writes the reply in the diner's language, behind `contradicts_refusal`        | Fixed English sentences; on a refusal or hold, hand-written Burmese, Urdu or Mandarin safety lines first |
+| Decides | Tables, forced lookup, forced kitchen question                                      | Same                                                                                                     |
+| Runs on | A laptop                                                                            | Render free tier (Docker), behind the Vercel site                                                        |
+| Start   | `SAFEPLATE_MODE=gemma uvicorn safeplate.api:app --port 8000`                        | `SAFEPLATE_MODE=rules uvicorn safeplate.api:app --port 8000`                                             |
 
-### Three times the model tried to say yes
+The site badges every run with the engine that produced it. When the hosted rules-mode agent
+is not reachable, it replays recorded runs, Gemma and rules alike, and says so
+([`web/src/lib/replays.ts`](web/src/lib/replays.ts)).
 
-Each of these was measured during the build, not imagined afterwards.
+## Run it
 
-**1. It offered the dish it had just refused.** Handed `do_not_serve` and the reason that fish
-sauce is structural to pad thai, Gemma wrote:
-
-> _"We can offer you the Pad Thai without any added fish sauce instead."_
-
-That is the sentence that puts an allergic diner in an ambulance. Strengthening the system
-prompt did not fix it. Restating the prohibition inside the facts block did not fix it.
-
-**2. It implied a refusal had lifted.** After a _cross-contact_ refusal it wrote _"We can omit
-the crushed peanuts if you would like"_ — subtler, and just as dangerous.
-
-So the model's own prose gets a deterministic check. Any offer to make, serve or adjust the
-refused dish discards the generated text for text assembled from facts — which is then
-_translated_ rather than regenerated, because translation cannot invent an offer the source
-does not contain.
-
-**3. It checked a dish against nothing.** Given _"I have a tree nut allergy"_, it once returned
-an empty `avoid` list, and the run carried on to the kitchen question with no allergen to ask
-about. A case with nothing to check now stops rather than looking as though it was checked.
-
-**A language model is never the last line of defence — and that has to include what it writes
-about its own verdict.**
-
-**Reliability comes from the harness, not from a 2B model remembering to plan well.** Track 2
-asks whether an agent survives contact with failure; a loop that _guarantees_ escalation is a
-better answer than a model that usually remembers.
-
-## Measured, not assumed
-
-| Check                                | Result                                    |
-| ------------------------------------ | ----------------------------------------- |
-| E2B emits well-formed **tool calls** | Pass — arguments extracted verbatim       |
-| E2B **consumes** tool results        | Pass — correct follow-up answer           |
-| E2B **escalates unprompted**         | **Fail** — hence the forced loop above    |
-| E2B **vision** on dense printed text | **Fail** — echoed the prompt, then digits |
-| **Tesseract** OCR on a label         | Pass — **0.90 s**, clean transcription    |
-
-Latency: **24.0 s** first tool-calling turn (schemas in context, model cold), **7.3 s** warm,
-**0.90 s** OCR. A six-step run is roughly 60 s.
-
-These were measured during the event. OCR has since been taken out of the running system: the
-Symphony labels are transcribed verbatim into `safeplate/menu_symphony.py`, and `read_label` is
-a rule over that data. No photo is taken or read.
-
-## Features
-
-- **Labels as data** — each Symphony label transcribed verbatim, bold markings included, and
-  read by rule; no photo is taken or sent
-- **EU-14 allergen matching** — Regulation (EU) No 1169/2011, with synonym resolution
-- **Guaranteed escalation** — unresolved ingredients always trigger an external lookup
-- **The agent asks a human** — cross-contact is evidence no document contains, so it stops and asks the kitchen
-- **Refusal as a first-class outcome** — conflicting sources produce `DO NOT SERVE`, never an average
-- **Multilingual output** — verdict rendered in the diner's language
-- **Visible agent trace** — every tool call, result and decision shown, not summarised, with each
-  step labelled by what produced it: Gemma, a deterministic rule, SerpApi, or a human
-
-## Tech stack
-
-| Layer             | Choice                               | Why                                                 |
-| ----------------- | ------------------------------------ | --------------------------------------------------- |
-| Model             | Gemma 4 **E2B** via Ollama           | Runs offline on a laptop; takes audio directly      |
-| Model call        | Ollama `/v1/chat/completions`        | `input_audio` for speech, `temperature` 0           |
-| Orchestrator      | FastAPI                              | Owns control flow and forced escalation             |
-| Allergen logic    | Plain Python table                   | Deterministic and auditable by design               |
-| External evidence | SerpApi (`engine=google`)            | Manufacturer declarations the label omits           |
-| Interface         | Next.js 16 · TypeScript · Tailwind 4 | Operator console + agent trace, deployed on Vercel  |
-
-> SafePlate calls the loopback HTTP API directly with the standard library
-> (`safeplate/speech.py`) rather than through a client package.
-
-## Getting started
-
-**Prerequisites:** Python 3.10+ and [Ollama](https://ollama.com). `ffmpeg` on `PATH` is
-optional, for transcoding browser audio.
+**Backend.** Python 3.10+.
 
 ```bash
-git clone git@github.com:RitaTY/gemma4.git
-cd gemma4
+git clone https://github.com/soneeee22000/safeplate.git
+cd safeplate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env                                 # SERPAPI_KEY is optional
 
-ollama pull gemma4:e2b        # 7.2 GB
-pip install -r requirements.txt        # runtime
-pip install -r requirements-dev.txt    # tests and lint
-uvicorn safeplate.api:app --port 8000
+# Rules mode: no model needed
+SAFEPLATE_MODE=rules uvicorn safeplate.api:app --port 8000
+
+# Gemma mode: needs Ollama (ffmpeg on PATH is optional, for browser audio)
+ollama pull gemma4:e2b
+SAFEPLATE_MODE=gemma uvicorn safeplate.api:app --port 8000
 ```
 
-No model on the host? `SAFEPLATE_MODE=rules` runs the same safety decisions with keyword intake
-and fixed sentences. `SAFEPLATE_CORS_ORIGINS` sets the browser origins allowed to call the API;
-see `.env.example`.
+`curl http://127.0.0.1:8000/health` returns the mode it is running in.
 
-Optional, for the external lookup only:
-
-```bash
-export SERPAPI_KEY=...
-```
-
-## Project structure
-
-```
-safeplate/          api · loop · allergens · dishes · menu_symphony · speech · voice · serp
-fixtures/           recorded runs — one held for confirmation, one clearance. THE FROZEN CONTRACT.
-web/                Next.js operator console and landing page
-  src/lib/trace.ts        the same schema, typed
-  src/lib/orchestrator.ts the FastAPI client + demo replay
-docs/
-  safeplate-mvp-decision.md  scope, persona, rubric mapping — read this first
-  safeplate-spec.md          tool contracts, gate results, sequence diagram
-```
-
-**`fixtures/trace-refusal.json` is the contract everything agrees on.** The Python loop emits
-that shape and the interface renders it, so both sides were built in parallel without waiting
-on each other. Start there.
-
-Full technical spec, including the frozen tool contracts and the EU-14 allergen set:
-**[`docs/safeplate-spec.md`](docs/safeplate-spec.md)**
-
-### Running the interface
+**Frontend.** Node 20+.
 
 ```bash
 cd web
 npm install
-npm run dev          # http://localhost:3000/verify
+npm run dev            # http://localhost:3000/verify, talks to http://127.0.0.1:8000
 ```
 
-It talks to the orchestrator at `http://127.0.0.1:8000` when that is up, and replays a recorded
-case when it is not — labelled in the interface so the two are never confused. Point it
-elsewhere with `NEXT_PUBLIC_ORCHESTRATOR_URL`.
+A production build only calls a backend named in `NEXT_PUBLIC_ORCHESTRATOR_URL`:
 
-The orchestrator contract the interface expects:
-
-```
-POST /api/case                  -> { run_id }
-GET  /api/case/{run_id}         -> { status, pending_question?, trace }
-POST /api/case/{run_id}/answer  -> { status, trace }
-GET  /health
+```bash
+NEXT_PUBLIC_ORCHESTRATOR_URL=http://127.0.0.1:8000 npm run build && npm start
 ```
 
-`status` is one of `running`, `awaiting_human`, `complete`, `failed`. A run genuinely stops on
-`awaiting_human` until the kitchen answers.
+Browser origins other than `http://localhost:3000` and the deployed site must be added to
+`SAFEPLATE_CORS_ORIGINS` (comma-separated; `*` is refused).
 
-## Team
+**Docker** (rules mode, as hosted):
 
-Built at the Gemma 4 Hackathon, 42 Paris, by a team of four.
+```bash
+docker build -t safeplate .
+docker run -p 8000:8000 safeplate
+```
 
-|                                                                         |                                                   |
-| ----------------------------------------------------------------------- | ------------------------------------------------- |
-| **Rita**                                                                | Product, frontend, agent trace view, pitch        |
-| **Afaq**                                                                | SerpApi lookup, evidence normalisation, FastAPI   |
-| **Yan**                                                                 | Agent loop, tool registry, forced escalation      |
-| **Pyae Sone (Seon)** — [@soneeee22000](https://github.com/soneeee22000) | Gemma 4 integration, OCR, EU-14 table, evaluation |
+**Checks** (the same ones CI runs, [`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+
+```bash
+ruff check .
+pytest -q                                  # 286 tests, no network or model needed
+cd web && npm run lint && npm run build
+```
+
+API: `POST /api/case` → `{run_id}`, `GET /api/case/{run_id}` → `{status, pending_question?,
+trace}`, `POST /api/case/{run_id}/answer` with `{risk: none|risk|unsure, note?}`, `GET /health`
+([`safeplate/api.py`](safeplate/api.py)).
+
+## Deploy
+
+Backend on Render from [`render.yaml`](render.yaml), frontend on Vercel. Steps, environment
+variables and the cold-start note are in [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+## Limits
+
+- **Not a certified food-safety tool.** It is a demonstration of a design, and no one should
+  serve food on its word.
+- **No operator interviews.** No restaurant server or kitchen has used it in service.
+- **Rules-mode intake is keyword matching.** It cannot resolve "the thing my friend ordered"
+  and cannot hear audio. When it misses a dish or allergen it asks again rather than guessing.
+- **Rules-mode replies are in English**, with hand-written safety lines for Burmese, Urdu and
+  Mandarin only. French and every other language get English.
+- **No language has been evaluated by a native speaker.** The Burmese, Urdu and Mandarin safety
+  lines are drafts awaiting sign-off ([`safeplate/languages.py:81`](safeplate/languages.py#L81)),
+  and Gemma's generated replies have not been reviewed by native speakers either.
+- **Small tables.** Eight cooked dishes and three sealed trays. Anything else is refused as
+  unknown, by design.
+- **Render free tier sleeps.** The first request after idle can take a while; the site replays
+  recorded runs until the agent answers.
+- **Runs live in memory.** A restart loses open cases.
+
+## If this were a product
+
+1. The tables are the product: each restaurant's recipes and labels, entered and signed off by
+   the kitchen, and kept current when a supplier changes.
+2. Safety sentences signed off by native speakers, and the whole flow reviewed by someone
+   qualified in food safety.
+3. A pilot with real servers, measured on whether it cuts the questions that reach the pass
+   without ever clearing a dish the kitchen would have refused.
+
+## About the recordings
+
+The GIF above and the screenshots come from the rules-mode build running locally. The run plays
+at real speed. The scroll afterwards was added for the capture, and the stamp's landing
+animation was replayed once it scrolled into view. Full-size clip:
+[`verify-padthai.mp4`](docs/media/verify-padthai.mp4).
 
 ## Provenance
 
-`llm.py`, `ocr.py` and `config.py` were extracted from an earlier offline-document project by
-[@soneeee22000](https://github.com/soneeee22000) and predate the hackathon. `llm.py` and `ocr.py`
-have since been removed as unused. Everything else was
-built during the event. Disclosed per competition rules §4.3.
+Built at the Gemma 4 Hackathon Paris (42 Paris, Track 2: Autonomous Agents) as a team entry.
+The judged snapshot is the tag [`hackathon-submission`](https://github.com/soneeee22000/safeplate/tree/hackathon-submission)
+(commit `acb67d1`); the original submission repo is
+[RitaTY/gemma4](https://github.com/RitaTY/gemma4). Since the event I have relaunched it as a
+portfolio piece: fail-closed kitchen answers, the keyless rules mode, real SerpApi evidence, the
+Docker/Render backend and the rebuilt site. Every commit in this repo's history is mine
+(`git shortlog -sn`). The judged README and the event-day design docs assign build roles across
+the team; they are kept as a record of the day, not of who wrote this code.
+[`safeplate/config.py`](safeplate/config.py) started in an earlier project of mine and predates
+the event, as disclosed at submission.
 
-## Licence
+Event-day notes and design docs, kept as they were apart from small edits:
+[`docs/hackathon/`](docs/hackathon/README.md).
 
-MIT — see [`LICENSE`](LICENSE).
+## License
+
+MIT — see [`LICENSE`](LICENSE). Author: Pyae Sone Kyaw (Seon),
+[@soneeee22000](https://github.com/soneeee22000).

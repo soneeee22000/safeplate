@@ -1,3 +1,5 @@
+> Status: event-day design doc; see the [README](../README.md) for what shipped.
+
 # SafePlate as an ordering companion — the Symphony.fr onboarding
 
 **Status: product framing. Supersedes the persona section of
@@ -257,7 +259,7 @@ than from generation:
 | What else fits            | The same assessment run across the rest of the menu                 |
 
 Gemma phrases this in the diner's language. It does not decide any of it. The refusal
-guardrail described in [`docs/kaggle-writeup.md`](kaggle-writeup.md) still applies: any
+guardrail described in [`docs/hackathon/kaggle-writeup.md`](hackathon/kaggle-writeup.md) still applies: any
 generated sentence that offers to make or adjust a refused dish is discarded in favour of
 text assembled from facts, then translated.
 

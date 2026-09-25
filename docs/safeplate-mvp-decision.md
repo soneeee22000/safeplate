@@ -1,3 +1,5 @@
+> Status: event-day design doc; see the [README](../README.md) for what shipped.
+
 # SafePlate — MVP decision & use-case flow (FROZEN)
 
 **Decided 2026-07-25 13:30 Paris · Submission closes 18:00 GMT+2 · ~4h30m remaining**
