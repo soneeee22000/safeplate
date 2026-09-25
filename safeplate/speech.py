@@ -68,6 +68,9 @@ class Intent:
     avoid: list[str] = field(default_factory=list)
     request_type: str = "question"
     notes: str | None = None
+    #: Words the diner gave as allergies that could not be matched to one. The
+    #: loop stops on any, rather than check the dish against a partial list.
+    unrecognised: list[str] = field(default_factory=list)
 
     @property
     def actionable(self) -> bool:

@@ -1,0 +1,42 @@
+[
+  {
+    "source": "prapaipat.com",
+    "url": "https://www.prapaipat.com/en/products/tamarindenpaste-250-ml?srsltid=AU7gw4UFY5o1jG2QuFUICq6xPyYxTlA8tsUvAYB_7j0qii3yPGylyE4G",
+    "text": "Ingredients (allergens in BOLD): Tamarind (92%) Water Salt Acidity regulator E330 (citric acid) Preservatives: E202 (potassium sorbate), E211 (sodium benzoate)",
+    "declares": [],
+    "trusted": false
+  },
+  {
+    "source": "thetastywok.co.uk",
+    "url": "https://thetastywok.co.uk/products/tamarind-paste-400g?srsltid=AU7gw4VZBmEEk55N3bP50nitV4gAmtA1nEADvwYV7sCOI2Fqng9NBnUZ",
+    "text": "Ingredients Allergens 100% Tamarind \u2026 the products listed may be subject to subsequent changes in supplier, recipe, or allergen information.",
+    "declares": [],
+    "trusted": false
+  },
+  {
+    "source": "bevasarlas.tesco.hu",
+    "url": "https://bevasarlas.tesco.hu/shop/en-HU/products/2005100241519?srsltid=AU7gw4XH-T3b3DidSkI_vgjTWzICPHs1w5IcKwcxjzoxnjonKSunzVsZ",
+    "text": "... ingredients, nutrition content, dietary and allergens may change. You should always read the product label and not rely solely on the information provided ...",
+    "declares": [],
+    "trusted": true
+  },
+  {
+    "source": "ebay.com",
+    "url": "https://www.ebay.com/itm/236908335418",
+    "text": "May Contain Nuts, May Contain Peanuts, May Contain Soya, May Contain Wheat Ingredients (ingredients and allergens may be subject to change, so it is important ...",
+    "declares": [
+      "cereals containing gluten",
+      "nuts",
+      "peanuts",
+      "soybeans"
+    ],
+    "trusted": false
+  },
+  {
+    "source": "amazon.co.uk",
+    "url": "https://www.amazon.co.uk/Mexican-Tamarind-Concentrate-100-Natural/dp/B0D8TZM3HR",
+    "text": "Tamarind paste is a pure, high quality Indian tamarind concentrate. It is a sticky dark paste without seeds or fibres and shell fragments.",
+    "declares": [],
+    "trusted": true
+  }
+]

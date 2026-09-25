@@ -60,7 +60,7 @@ SYNONYMS: dict[str, str] = {
     "cacahuète": "peanuts", "peanut oil": "peanuts",
     "almond": "nuts", "amande": "nuts", "hazelnut": "nuts", "noisette": "nuts",
     "walnut": "nuts", "noix": "nuts", "cashew": "nuts", "pistachio": "nuts",
-    "pine nut": "nuts", "pine nuts": "nuts", "pignon": "nuts", "pecan": "nuts",
+    "pecan": "nuts", "brazil nut": "nuts", "macadamia": "nuts",
     # sesame / soy / others
     "tahini": "sesame", "tahina": "sesame", "sesame oil": "sesame", "sésame": "sesame",
     "soy": "soybeans", "soya": "soybeans", "tofu": "soybeans", "edamame": "soybeans",
@@ -68,7 +68,8 @@ SYNONYMS: dict[str, str] = {
     "celeriac": "celery", "céleri": "celery",
     "dijon": "mustard", "moutarde": "mustard",
     "sulphur dioxide": "sulphites", "e220": "sulphites", "e221": "sulphites",
-    "e202": "sulphites",
+    "e202": "sulphites", "sulfite": "sulphites", "sulphite": "sulphites",
+    "lupine": "lupin",
 }
 
 
@@ -98,6 +99,46 @@ GROUPS: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Not an EU-14 allergen, but routinely avoided by diners allergic to tree nuts.
+TREE_NUT_ADJACENT = "tree-nut-adjacent"
+
+#: Advisories: foods Annex II does not list, which some allergic diners still
+#: avoid. They are never reported as declarable allergens, and never cleared
+#: silently either — a match holds the case for a person to confirm.
+ADVISORIES: dict[str, str] = {
+    TREE_NUT_ADJACENT: (
+        "Not an EU-14 allergen, but often avoided by tree-nut-allergic diners — ask."
+    ),
+}
+
+#: The declarable allergens each advisory matters to.
+ADVISORY_CONCERNS: dict[str, tuple[str, ...]] = {
+    TREE_NUT_ADJACENT: ("nuts",),
+}
+
+#: Ingredient words that carry an advisory. Annex II point 8 names almonds,
+#: hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias;
+#: pine nuts are not among them, so a label that leaves them unbolded is right.
+ADVISORY_TERMS: dict[str, str] = {
+    "pine nut": TREE_NUT_ADJACENT, "pine nuts": TREE_NUT_ADJACENT,
+    "pignon": TREE_NUT_ADJACENT, "pignons": TREE_NUT_ADJACENT,
+    "pignon de pin": TREE_NUT_ADJACENT, "pignons de pin": TREE_NUT_ADJACENT,
+    "pinoli": TREE_NUT_ADJACENT,
+}
+
+#: How an ingredient met a diner's request: named or declared outright, or only
+#: through an advisory.
+MATCH_DIRECT = "direct"
+MATCH_ADVISORY = "advisory"
+
+
+def advisories(term: str) -> tuple[str, ...]:
+    """The advisories an ingredient or spoken word carries; empty for most food."""
+    key = term.strip().lower()
+    found = {advisory for phrase, advisory in ADVISORY_TERMS.items() if phrase in key}
+    return tuple(sorted(found))
+
+
 def expand(term: str) -> tuple[str, ...]:
     """Every declarable allergen a diner's word could mean.
 
@@ -105,8 +146,15 @@ def expand(term: str) -> tuple[str, ...]:
     come back as all the allergens they cover.
     """
     key = term.strip().lower()
+    # "pine nuts" names one food, not the tree-nut group its last word suggests.
+    if key in ADVISORY_TERMS:
+        return (key,)
     if key in GROUPS:
         return GROUPS[key]
+    # "peanuts" already names one allergen; the substring scan below would read
+    # its "nuts" as the whole nut group and treat a peanut allergy as tree nuts.
+    if key in EU_14 or key in SYNONYMS:
+        return (normalise(key),)
     for phrase, allergens in GROUPS.items():
         if phrase in key:
             return allergens
@@ -135,12 +183,37 @@ def normalise(term: str) -> str:
     return key
 
 
-def conflicts(avoid: str, ingredient_allergens: list[str], ingredient_name: str) -> bool:
-    """True when an ingredient is something the diner said to avoid."""
+def conflict_kind(avoid: str, ingredient_allergens: list[str],
+                  ingredient_name: str) -> str | None:
+    """How an ingredient conflicts with what the diner said to avoid, if it does.
+
+    Args:
+        avoid: One term the diner said they cannot eat.
+        ingredient_allergens: The EU-14 allergens the ingredient declares.
+        ingredient_name: The ingredient as written.
+
+    Returns:
+        `MATCH_DIRECT` when the ingredient declares or is what the diner named,
+        `MATCH_ADVISORY` when it only carries an advisory the diner's allergy
+        makes relevant, and None when it does not conflict.
+    """
     targets = expand(avoid)
     if any(target in ingredient_allergens for target in targets):
-        return True
+        return MATCH_DIRECT
     # Direct naming: the diner said "fish sauce" and this ingredient is fish sauce.
     if normalise(ingredient_name) in targets:
-        return True
-    return avoid.strip().lower() in ingredient_name.lower()
+        return MATCH_DIRECT
+    carried = advisories(ingredient_name)
+    if set(advisories(avoid)) & set(carried):
+        return MATCH_DIRECT
+    if any(concern in targets for advisory in carried
+           for concern in ADVISORY_CONCERNS[advisory]):
+        return MATCH_ADVISORY
+    if avoid.strip().lower() in ingredient_name.lower():
+        return MATCH_DIRECT
+    return None
+
+
+def conflicts(avoid: str, ingredient_allergens: list[str], ingredient_name: str) -> bool:
+    """True when an ingredient is something the diner said to avoid, or may be."""
+    return conflict_kind(avoid, ingredient_allergens, ingredient_name) is not None

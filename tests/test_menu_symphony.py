@@ -9,14 +9,16 @@ that it cannot be guaranteed.
 
 The case these tests exist for is the "Gnocchis pesto vegan". Vegan is a claim
 about animal products, not about allergens: the dish contains gnocchi, which are
-gluten, and pignons de pin, which are pine nuts. The label does not bold them. A
-nut-allergic diner who reads "vegan" and orders it is the person this project is
-for, and this file is what stops that reading from being encoded as safe.
+gluten, and pignons de pin, which are pine nuts. Pine nuts are not an EU-14
+allergen (Annex II names almonds, hazelnuts, walnuts, cashews, pecans, Brazil
+nuts, pistachios and macadamias), so the label is right not to bold them — but
+many tree-nut-allergic diners avoid them. A nut-allergic diner who reads "vegan"
+and orders it is the person this project is for, and this file is what stops
+that reading from being encoded as safe.
 
-`safeplate/menu_symphony.py` is being written alongside these tests, so the
-module is probed by capability rather than by exact symbol name: a dish that
-cannot be found skips with a message naming what was looked for, and only a
-wrong safety answer fails.
+The module is probed by capability rather than by exact symbol name, but a
+dish that cannot be found fails with a message naming what was looked for:
+a renamed tray must turn these safety tests red, never skip them quietly.
 """
 
 from __future__ import annotations
@@ -28,13 +30,8 @@ from typing import Any
 
 import pytest
 
-from safeplate.allergens import EU_14, normalise
-
-menu_symphony = pytest.importorskip(
-    "safeplate.menu_symphony",
-    reason="safeplate/menu_symphony.py does not exist yet — the Symphony menu tests "
-           "have nothing to run against.",
-)
+from safeplate import menu_symphony
+from safeplate.allergens import EU_14, advisories, normalise
 
 #: The ten allergen classes on the Symphony atelier line, mapped from the words a
 #: label actually uses (French, and the EU-14 English names) to the EU-14 name.
@@ -320,13 +317,13 @@ def _dish_table() -> dict[str, Any]:
 
 
 def _require(*alternatives: str) -> Any:
-    """The dish matching any of these label words, or a skip naming what was missing."""
+    """The dish matching any of these label words, or a failure naming what was missing."""
     table = _dish_table()
     for needle in alternatives:
         for dish in table.values():
             if needle in _fold(" ".join(_strings(dish))):
                 return dish
-    pytest.skip(
+    pytest.fail(
         f"No dish in safeplate.menu_symphony matches any of {alternatives!r}. "
         f"Dishes found: {sorted(table)}."
     )
@@ -444,18 +441,23 @@ def test_celery_diner_is_not_cleared_for_the_bolognaise(bolognaise: Any) -> None
 
 
 def test_vegan_gnocchi_is_not_cleared_for_a_nut_allergy(gnocchi: Any) -> None:
-    """Pignons de pin are pine nuts. Vegan is a claim about animal products only."""
+    """Pignons de pin are pine nuts: an advisory, not an EU-14 allergen, never cleared."""
     text = _fold(" ".join(_strings(gnocchi)))
-    derived = _declared(gnocchi)
+    pine_nuts = next(item for item in _components(gnocchi)
+                     if "pignon" in _fold(" ".join(_component_texts(item))))
 
     assert "vegan" in text, "This fixture matched a dish that is not the vegan gnocchi."
     assert "pignon" in text, (
         "The label lists pignons de pin. Losing them from the ingredient list is what "
         "puts a nut-allergic diner in front of this plate."
     )
-    assert "nuts" in derived, (
-        "Pignons de pin are pine nuts, a tree nut, and the label does not bold them. "
-        f"Vegan does not imply nut-free. Derived: {sorted(derived)}."
+    assert not _component_tags(pine_nuts), (
+        "Pine nuts are not an EU-14 allergen, so they must not be tagged as a "
+        "declarable one: the label is compliant in not bolding them."
+    )
+    assert advisories(pine_nuts.name), (
+        "Pine nuts carry the tree-nut-adjacent advisory, so a nut-allergic diner is "
+        "still asked rather than cleared."
     )
     assert not _claims_free_of(gnocchi, "nuts")
     assert _probe_cleared(gnocchi, "nuts") is not True

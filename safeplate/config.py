@@ -1,4 +1,4 @@
-"""Central configuration — paths, model, and OCR settings in one place.
+"""Central configuration — paths, mode, model and HTTP settings in one place.
 
 Kept as module-level constants (no magic values scattered across the code). Paths are
 resolved relative to the project root so the package runs from anywhere.
@@ -33,20 +33,67 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
+# --- Mode ---
+# `gemma` hears and speaks through the local model. `rules` runs with no model at
+# all, for a free host that cannot hold a 7.2 GB download: typed text only, heard
+# by keyword matching and answered in fixed sentences. The safety decisions are
+# the same code in both modes; only the hearing and the speaking change.
+MODE_GEMMA: str = "gemma"
+MODE_RULES: str = "rules"
+MODES: tuple[str, ...] = (MODE_GEMMA, MODE_RULES)
+
+
+def _read_mode() -> str:
+    """The mode from `SAFEPLATE_MODE`, refusing to start on a value it does not know.
+
+    A typo silently falling back to either mode would hide which one is live, so
+    an unknown value stops the process instead.
+    """
+    value = os.environ.get("SAFEPLATE_MODE", MODE_GEMMA).strip().lower() or MODE_GEMMA
+    if value not in MODES:
+        raise ValueError(f"SAFEPLATE_MODE must be one of {MODES}, not {value!r}")
+    return value
+
+
+SAFEPLATE_MODE: str = _read_mode()
+
 # --- Model (offline via Ollama) ---
 MODEL_NAME: str = "gemma4:e2b"  # E4B OOMs on 16GB; E2B is the demo model
-OLLAMA_HOST: str = "http://127.0.0.1:11434"
 
 # --- Generation ---
 # Zero is required, not preferred: the agent loop compares tool-call decisions
 # across turns, and any sampling makes that comparison meaningless.
 GENERATION_TEMPERATURE: float = 0.0
 
-# Gemma 4 E2B emits a chain-of-thought into Ollama's separate `thinking` field —
-# invisible output you still wait for. Disabling it cut latency roughly 3x.
-DISABLE_THINKING: bool = True
+# --- HTTP surface ---
+#: The interfaces allowed to call the orchestrator from a browser: the local dev
+#: server and the deployed site. Overridden by `SAFEPLATE_CORS_ORIGINS`.
+DEFAULT_CORS_ORIGINS: tuple[str, ...] = (
+    "http://localhost:3000",
+    "https://safeplate-ten.vercel.app",
+)
+CORS_WILDCARD: str = "*"
 
-# --- OCR (local Tesseract) ---
-TESSERACT_EXE: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-TESSDATA_DIR: Path = PROJECT_ROOT / "tessdata"
-OCR_LANG: str = "eng+fra"  # ingredient panels are rarely in a single language
+
+def parse_cors_origins(value: str | None) -> tuple[str, ...]:
+    """The allowed origins from a comma-separated list, or the defaults when empty.
+
+    A wildcard is refused rather than honoured: an orchestrator that any page on
+    the web can drive is not a setting anyone should reach by typing one character.
+
+    Raises:
+        ValueError: The list contains `*`.
+    """
+    if value is None or not value.strip():
+        return DEFAULT_CORS_ORIGINS
+    origins = tuple(
+        origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()
+    )
+    if not origins:
+        return DEFAULT_CORS_ORIGINS
+    if CORS_WILDCARD in origins:
+        raise ValueError("SAFEPLATE_CORS_ORIGINS must list origins; a wildcard is refused")
+    return origins
+
+
+CORS_ORIGINS: tuple[str, ...] = parse_cors_origins(os.environ.get("SAFEPLATE_CORS_ORIGINS"))

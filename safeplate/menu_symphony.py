@@ -14,8 +14,10 @@ Two properties of these labels drive everything below:
     workshop can ever be declared free of any of them. For a severe allergy the
     only honest verdict is that it cannot be guaranteed.
   * "Vegan" is a claim about animal products, not about allergens. The vegan
-    gnocchi carry gluten in two places and tree nuts in the pesto, and the pine
-    nuts are not bolded. A diner scanning the bold text will miss them.
+    gnocchi carry gluten in two places, and pine nuts in the pesto. Pine nuts
+    are not an EU-14 allergen, so the label is right not to bold them — the gap
+    is in the regulation, not the label — but many tree-nut-allergic diners
+    avoid them, so they are carried as an advisory that a person must confirm.
 
 The ingredient lists are transcribed verbatim in French, in label order, with an
 English gloss. Nothing is inferred: an ingredient carries an allergen here only
@@ -26,7 +28,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .allergens import EU_14, conflicts, expand, normalise
+from .allergens import (
+    ADVISORY_CONCERNS,
+    EU_14,
+    MATCH_ADVISORY,
+    MATCH_DIRECT,
+    advisories,
+    conflict_kind,
+    expand,
+    normalise,
+)
 from .dishes import Ingredient, Role
 
 PRODUCER = "Symphony.fr, 13B rue du Clos de Marolles, 28130 Pierres"
@@ -66,12 +77,14 @@ SEALED_TRAY_REASON = (
 )
 
 PINE_NUT_WHY = (
-    "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree "
-    "nuts. They are printed in the ingredient list but not in bold, so a diner "
-    "checking the bold allergen text will not see them. The dish is also sold as "
-    "vegan, which describes animal products and says nothing about nuts. The nuts "
-    "are blended into the sauce before the tray is sealed, so there is no version "
-    "of this plat without them."
+    "The pesto is made with pine nuts — pignons de pin. Pine nuts are not one of "
+    "the EU-14 allergens: Regulation (EU) No 1169/2011 lists almonds, hazelnuts, "
+    "walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, so the "
+    "label is compliant in not setting them in bold. Many tree-nut-allergic "
+    "diners avoid them all the same, so ask before serving. The dish is sold as "
+    "vegan, which says nothing about nuts, and the pine nuts are blended into the "
+    "sauce before the tray is sealed, so there is no version of this plat without "
+    "them."
 )
 
 GLUTEN_IN_VEGAN_WHY = (
@@ -95,8 +108,6 @@ LABEL_FRENCH_TERMS: dict[str, str] = {
     "lait": "milk",
     "fruits à coque": "nuts",
     "fruits a coque": "nuts",
-    "pignons de pin": "nuts",
-    "pignon de pin": "nuts",
     "cabillaud": "fish",
 }
 
@@ -155,10 +166,13 @@ SHARED_FACILITY = SharedFacility(
 
 @dataclass(frozen=True)
 class LabelConflict:
-    """An ingredient on the label that the diner said they cannot eat."""
+    """An ingredient on the label that the diner said they cannot eat, or may not."""
 
     ingredient: LabelIngredient
     matched_avoid: str
+    #: Matched only through an advisory: the ingredient is not an EU-14 allergen,
+    #: so the label had nothing to bold, and a person has to confirm instead.
+    advisory: bool = False
 
     @property
     def declared(self) -> bool:
@@ -178,25 +192,44 @@ class LabelReport:
     vegan_misreads: tuple[str, ...]
 
     @property
+    def direct_conflicts(self) -> tuple[LabelConflict, ...]:
+        """Conflicts with a declarable allergen, or with an ingredient the diner named."""
+        return tuple(item for item in self.label_conflicts if not item.advisory)
+
+    @property
+    def advisory_conflicts(self) -> tuple[LabelConflict, ...]:
+        """Conflicts only through an advisory, which no label is required to bold."""
+        return tuple(item for item in self.label_conflicts if item.advisory)
+
+    @property
     def declared_conflicts(self) -> tuple[LabelConflict, ...]:
         """Conflicts the label sets in bold as declared allergens."""
-        return tuple(item for item in self.label_conflicts if item.declared)
+        return tuple(item for item in self.direct_conflicts if item.declared)
 
     @property
     def undeclared_conflicts(self) -> tuple[LabelConflict, ...]:
-        """Conflicts present in the ingredient list but never bolded."""
-        return tuple(item for item in self.label_conflicts if not item.declared)
+        """Declarable allergens in the ingredient list that the label never bolded.
+
+        Advisory ingredients are excluded: leaving a non-EU-14 food unbolded is
+        what the regulation asks, not a labelling failure.
+        """
+        return tuple(
+            item for item in self.direct_conflicts
+            if not item.declared and set(item.ingredient.allergens) & set(EU_14)
+        )
 
     @property
     def outcome(self) -> str:
-        """`label_conflict`, `cannot_guarantee`, or `outside_the_declaration`.
+        """`label_conflict`, `advisory`, `cannot_guarantee` or `outside_the_declaration`.
 
-        `outside_the_declaration` is the weakest of the three and still is not a
-        clearance: it means the workshop line is silent on this allergen, so a
-        human has to answer instead of a label.
+        `outside_the_declaration` is the weakest and still is not a clearance: it
+        means the workshop line is silent on this allergen, so a human has to
+        answer instead of a label. `advisory` likewise waits for a person.
         """
-        if self.label_conflicts:
+        if self.direct_conflicts:
             return "label_conflict"
+        if self.advisory_conflicts:
+            return "advisory"
         if self.shared_facility_matches:
             return "cannot_guarantee"
         return "outside_the_declaration"
@@ -285,7 +318,7 @@ SYMPHONY_MENU: dict[str, PackagedDish] = {
             LabelIngredient("épinards fermes", gloss="firm spinach"),
             LabelIngredient("huile d'olive", gloss="olive oil"),
             LabelIngredient("basilic", gloss="basil"),
-            LabelIngredient("pignons de pin", ("nuts",), gloss="pine nuts",
+            LabelIngredient("pignons de pin", gloss="pine nuts",
                             declared=False, why=PINE_NUT_WHY),
             LabelIngredient("gran prosociano violife",
                             gloss="Violife Gran Prosociano, a vegan hard-cheese "
@@ -354,11 +387,16 @@ def _all_allergens(term: str) -> tuple[str, ...]:
     return expand(key)
 
 
-def matches(term: str, ingredient: LabelIngredient) -> bool:
-    """True when an ingredient is something the diner said to avoid."""
+def match_kind(term: str, ingredient: LabelIngredient) -> str | None:
+    """How an ingredient meets one diner term: `MATCH_DIRECT`, `MATCH_ADVISORY` or None."""
     if any(allergen in ingredient.allergens for allergen in _all_allergens(term)):
-        return True
-    return conflicts(term, list(ingredient.allergens), ingredient.name)
+        return MATCH_DIRECT
+    return conflict_kind(term, list(ingredient.allergens), ingredient.name)
+
+
+def matches(term: str, ingredient: LabelIngredient) -> bool:
+    """True when an ingredient is something the diner said to avoid, or may be."""
+    return match_kind(term, ingredient) is not None
 
 
 def vegan_misreads(dish: PackagedDish, avoid: list[str]) -> tuple[str, ...]:
@@ -377,6 +415,10 @@ def vegan_misreads(dish: PackagedDish, avoid: list[str]) -> tuple[str, ...]:
 
     targets = {allergen for term in avoid for allergen in _all_allergens(term)}
     present = {name for item in dish.ingredients for name in item.allergens}
+    present |= {
+        concern for item in dish.ingredients for advisory in advisories(item.name)
+        for concern in ADVISORY_CONCERNS[advisory]
+    }
     return tuple(
         why for allergen, why in VEGAN_MISREAD_WHY.items()
         if allergen in targets and allergen in present
@@ -394,11 +436,10 @@ def report(dish: PackagedDish, avoid: list[str]) -> LabelReport:
         The conflicts printed on the label, the workshop risk that is present on
         every plat, and any vegan misread this dish invites.
     """
-    found: list[LabelConflict] = []
-    for ingredient in dish.ingredients:
-        matched = next((term for term in avoid if matches(term, ingredient)), None)
-        if matched is not None:
-            found.append(LabelConflict(ingredient=ingredient, matched_avoid=matched))
+    found = [
+        conflict for ingredient in dish.ingredients
+        if (conflict := _conflict(ingredient, avoid)) is not None
+    ]
 
     return LabelReport(
         dish=dish,
@@ -407,6 +448,24 @@ def report(dish: PackagedDish, avoid: list[str]) -> LabelReport:
         shared_facility_matches=facility_matches(avoid),
         vegan_misreads=vegan_misreads(dish, avoid),
     )
+
+
+def _conflict(ingredient: LabelIngredient, avoid: list[str]) -> LabelConflict | None:
+    """The strongest conflict between one label ingredient and the diner's terms.
+
+    A direct match outranks an advisory one, so a diner who names pine nuts is
+    refused outright rather than asked.
+    """
+    advisory: LabelConflict | None = None
+    for term in avoid:
+        kind = match_kind(term, ingredient)
+        if kind is None:
+            continue
+        if kind != MATCH_ADVISORY:
+            return LabelConflict(ingredient=ingredient, matched_avoid=term)
+        advisory = advisory or LabelConflict(ingredient=ingredient, matched_avoid=term,
+                                             advisory=True)
+    return advisory
 
 
 #: Words a diner or the model might use for each plat. Substring matching is not
@@ -425,6 +484,14 @@ DISH_KEYWORDS: dict[str, frozenset[str]] = {
     ),
 }
 
+#: Keywords that ordinary dishes share with these plats. One of them alone is
+#: not evidence of a Symphony tray: "pesto pasta" and "pâtes carbonara" belong to
+#: the dish table, not to the gnocchi or the bolognaise.
+GENERIC_KEYWORDS: frozenset[str] = frozenset({"pesto", "pates", "pâtes", "vegan", "poulet"})
+
+#: A keyword match below this count needs a distinctive keyword to stand on.
+MIN_GENERIC_MATCHES = 2
+
 _STRIP = str.maketrans(
     {"ë": "e", "é": "e", "è": "e", "ê": "e", "â": "a", "à": "a", "ô": "o", "î": "i",
      "ç": "c", "'": " ", "’": " ", "-": " ", ",": " ", ".": " "}
@@ -441,7 +508,8 @@ def lookup(dish_name: str | None) -> PackagedDish | None:
 
     Matching is by distinctive keyword rather than substring, because the dish
     name that reaches this function came out of a language model and rarely
-    matches the sleeve exactly.
+    matches the sleeve exactly. A keyword shared with ordinary dishes counts
+    only alongside a second one.
     """
     if not dish_name:
         return None
@@ -456,11 +524,20 @@ def lookup(dish_name: str | None) -> PackagedDish | None:
     spoken = _tokens(key)
     best_name, best_score = None, 0
     for name, keywords in DISH_KEYWORDS.items():
-        score = len(spoken & keywords)
-        if score > best_score:
-            best_name, best_score = name, score
+        matched = spoken & keywords
+        if not _is_strong(matched):
+            continue
+        if len(matched) > best_score:
+            best_name, best_score = name, len(matched)
 
     return SYMPHONY_MENU[best_name] if best_name else None
+
+
+def _is_strong(matched: set[str]) -> bool:
+    """True when matched keywords name a plat rather than a kind of food."""
+    if matched - GENERIC_KEYWORDS:
+        return True
+    return len(matched) >= MIN_GENERIC_MATCHES
 
 
 def allergens_present(dish: PackagedDish) -> set[str]:

@@ -4,15 +4,15 @@
   "dish": "Gnocchis pesto vegan",
   "allergen": "tree nuts",
   "diner_language": "en",
-  "verdict": "do_not_serve",
-  "total_ms": 46144,
+  "verdict": "needs_confirmation",
+  "total_ms": 4,
   "steps": [
     {
       "n": 1,
       "tool": "understand_request",
-      "engine": "gemma",
-      "title": "Gemma hears the diner",
-      "reasoning": "One call transcribes the audio and extracts the request. The model resolves 'without the fish sauce' against the dish it just heard named.",
+      "engine": "rule",
+      "title": "Rules read the typed request",
+      "reasoning": "No model on this host. The dish and the allergens are matched against the same tables the loop decides with; anything not recognised is left empty, so the loop asks instead of guessing.",
       "forced": false,
       "args": {
         "input": "text"
@@ -20,14 +20,14 @@
       "result": {
         "utterance": "I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?",
         "language": "en",
-        "dish": "gnocchi's pesto",
+        "dish": "gnocchis pesto vegan",
         "avoid": [
           "tree nuts"
         ],
         "request_type": "question"
       },
-      "duration_ms": 17261,
-      "note": "Typed input — same extraction path."
+      "duration_ms": 3,
+      "note": "Rules mode — keyword matching, no model."
     },
     {
       "n": 2,
@@ -43,57 +43,58 @@
         ]
       },
       "result": {
-        "outcome": "label_conflict",
+        "outcome": "advisory",
         "label_conflicts": [
           {
             "ingredient": "pignons de pin",
-            "declared_in_bold": false
+            "declared_in_bold": false,
+            "advisory": true
           }
         ],
         "shared_facility_matches": [
           "tree nuts"
         ],
         "vegan_misreads": [
-          "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree nuts. They are printed in the ingredient list but not in bold, so a diner checking the bold allergen text will not see them. The dish is also sold as vegan, which describes animal products and says nothing about nuts. The nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
+          "The pesto is made with pine nuts — pignons de pin. Pine nuts are not one of the EU-14 allergens: Regulation (EU) No 1169/2011 lists almonds, hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, so the label is compliant in not setting them in bold. Many tree-nut-allergic diners avoid them all the same, so ask before serving. The dish is sold as vegan, which says nothing about nuts, and the pine nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
         ]
       },
       "duration_ms": 0,
-      "note": "The pesto is made with pine nuts — pignons de pin — and pine nuts are tree nuts. They are printed in the ingredient list but not in bold, so a diner checking the bold allergen text will not see them. The dish is also sold as vegan, which describes animal products and says nothing about nuts. The nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
+      "note": "The pesto is made with pine nuts — pignons de pin. Pine nuts are not one of the EU-14 allergens: Regulation (EU) No 1169/2011 lists almonds, hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, so the label is compliant in not setting them in bold. Many tree-nut-allergic diners avoid them all the same, so ask before serving. The dish is sold as vegan, which says nothing about nuts, and the pine nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them."
     },
     {
       "n": 3,
       "tool": "escalate",
       "engine": "rule",
       "title": "Refuse rather than guess",
-      "reasoning": "The ingredient is in the tray. It cannot be removed from a sealed dish, so the answer is no — and if the label never bolded it, the diner would not have found it by reading carefully.",
+      "reasoning": "pignons de pin (pine nuts): not an EU-14 allergen, so no label or table is wrong to leave it unflagged. Many diners with this allergy avoid it all the same, so a person has to ask the diner rather than the table clearing the dish.",
       "forced": true,
       "args": {
-        "verdict": "do_not_serve"
+        "verdict": "needs_confirmation"
       },
       "result": {
-        "verdict": "do_not_serve"
+        "verdict": "needs_confirmation"
       },
       "duration_ms": 0,
-      "forced_by": "an ingredient the diner must avoid is on the label but not in the bold allergen text"
+      "forced_by": "advisory ingredient — pignons de pin (pine nuts) (not an EU-14 allergen)"
     },
     {
       "n": 4,
       "tool": "compose_reply",
-      "engine": "gemma",
-      "title": "Gemma explains it in the diner's language (en)",
-      "reasoning": "The verdict was fixed before this ran. Gemma's job is to say it clearly and give the reason, not to reach it.",
+      "engine": "rule",
+      "title": "Fixed sentences state the verdict (en requested)",
+      "reasoning": "No model on this host. The reply is assembled from the facts, with hand-checked safety sentences where the diner's language has them and English otherwise.",
       "forced": false,
       "args": {
-        "verdict": "do_not_serve",
+        "verdict": "needs_confirmation",
         "language": "en"
       },
       "result": {
-        "verdict": "do_not_serve"
+        "verdict": "needs_confirmation"
       },
-      "duration_ms": 28881
+      "duration_ms": 0
     }
   ],
   "evidence": [],
-  "explanation": "We cannot serve this as requested. The label lists pignons de pin (pine nuts). It is not in the bold allergen text, which is why it is easy to miss.  Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
-  "explanation_en": "We cannot serve this as requested. The label lists pignons de pin (pine nuts). It is not in the bold allergen text, which is why it is easy to miss.  Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering."
+  "explanation": "We cannot confirm this yet. The label lists pignons de pin (pine nuts). Pine nuts: not an EU-14 allergen, but often avoided by tree-nut-allergic diners — ask. The pesto is made with pine nuts — pignons de pin. Pine nuts are not one of the EU-14 allergens: Regulation (EU) No 1169/2011 lists almonds, hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, so the label is compliant in not setting them in bold. Many tree-nut-allergic diners avoid them all the same, so ask before serving. The dish is sold as vegan, which says nothing about nuts, and the pine nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them. Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering.",
+  "explanation_en": "We cannot confirm this yet. The label lists pignons de pin (pine nuts). Pine nuts: not an EU-14 allergen, but often avoided by tree-nut-allergic diners — ask. The pesto is made with pine nuts — pignons de pin. Pine nuts are not one of the EU-14 allergens: Regulation (EU) No 1169/2011 lists almonds, hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, so the label is compliant in not setting them in bold. Many tree-nut-allergic diners avoid them all the same, so ask before serving. The dish is sold as vegan, which says nothing about nuts, and the pine nuts are blended into the sauce before the tray is sealed, so there is no version of this plat without them. Made in a workshop that also handles: gluten, celery, mustard, peanuts, fish, eggs, soya, milk, tree nuts, sesame. Please speak to a member of staff before ordering."
 }

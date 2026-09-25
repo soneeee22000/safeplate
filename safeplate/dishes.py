@@ -20,9 +20,11 @@ avoid.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
 
-from .allergens import conflicts, normalise
+from .allergens import MATCH_ADVISORY, conflict_kind, normalise
 
 Role = str  # "structural" | "substitutable" | "removable"
 
@@ -132,7 +134,9 @@ DISHES: dict[str, Dish] = {
         cuisine="Italian",
         cross_contact_note="pesto blended in a machine also used for nut pastes",
         ingredients=(
-            Ingredient("pine nuts", ("nuts",), "structural",
+            # Not tagged "nuts": Annex II does not list pine nuts. The advisory in
+            # `allergens.ADVISORY_TERMS` still holds a nut-allergic diner.
+            Ingredient("pine nuts", (), "structural",
                        "Pine nuts are what make pesto a pesto — they give it the body and "
                        "the fat. Without them it is chopped basil in oil."),
             Ingredient("parmesan", ("milk",), "substitutable", substitute="omit, add salt"),
@@ -176,10 +180,13 @@ DISHES: dict[str, Dish] = {
 class Finding:
     ingredient: Ingredient
     matched_avoid: str
+    #: Matched only through an advisory (pine nuts for a tree-nut allergy), not
+    #: through a declarable allergen or the diner naming the ingredient.
+    advisory: bool = False
 
     @property
     def blocking(self) -> bool:
-        return self.ingredient.role == "structural"
+        return self.ingredient.role == "structural" and not self.advisory
 
 
 @dataclass
@@ -196,15 +203,22 @@ class Assessment:
 
     @property
     def adjustable(self) -> list[Finding]:
-        return [item for item in self.findings if not item.blocking]
+        return [item for item in self.findings if not item.blocking and not item.advisory]
+
+    @property
+    def advisory(self) -> list[Finding]:
+        """Findings a person must confirm, because no regulation settles them."""
+        return [item for item in self.findings if item.advisory]
 
     @property
     def outcome(self) -> str:
-        """`cannot_assess`, `cannot_modify`, `modifiable`, or `already_clear`."""
+        """`cannot_assess`, `cannot_modify`, `advisory`, `modifiable`, or `already_clear`."""
         if self.unknown_dish:
             return "cannot_assess"
         if self.blocking:
             return "cannot_modify"
+        if self.advisory:
+            return "advisory"
         if self.adjustable:
             return "modifiable"
         return "already_clear"
@@ -226,6 +240,32 @@ def lookup(dish_name: str | None) -> Dish | None:
     return None
 
 
+def _name_tokens(text: str) -> set[str]:
+    """Lowercase words with accents stripped and punctuation turned into spaces."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    plain = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return set(re.sub(r"[^a-z0-9]+", " ", plain).split())
+
+
+def strong_match(dish_name: str | None) -> Dish | None:
+    """Find a dish only when every word of its table name was heard.
+
+    Stricter than `lookup`: this decides whether the table owns a name before any
+    other menu is consulted, so a fragment such as "pasta" must not claim it.
+    "pâtes carbonara" still resolves, because it contains all of "carbonara".
+    """
+    if not dish_name:
+        return None
+
+    heard = _name_tokens(dish_name)
+    if not heard:
+        return None
+    for name, dish in DISHES.items():
+        if _name_tokens(name) <= heard:
+            return dish
+    return None
+
+
 def assess(dish_name: str | None, avoid: list[str]) -> Assessment:
     """Decide whether the diner's request is possible, before asking anyone.
 
@@ -240,14 +280,29 @@ def assess(dish_name: str | None, avoid: list[str]) -> Assessment:
     if dish is None:
         return Assessment(dish=None, unknown_dish=True)
 
-    findings: list[Finding] = []
-    for ingredient in dish.ingredients:
-        for term in avoid:
-            if conflicts(term, list(ingredient.allergens), ingredient.name):
-                findings.append(Finding(ingredient=ingredient, matched_avoid=term))
-                break
-
+    findings = [
+        finding for ingredient in dish.ingredients
+        if (finding := _finding(ingredient, avoid)) is not None
+    ]
     return Assessment(dish=dish, findings=findings)
+
+
+def _finding(ingredient: Ingredient, avoid: list[str]) -> Finding | None:
+    """The strongest conflict between one ingredient and the diner's terms.
+
+    A direct match outranks an advisory one, so "nuts, pine nuts" still refuses
+    a dish whose pine nuts cannot come out.
+    """
+    advisory: Finding | None = None
+    for term in avoid:
+        kind = conflict_kind(term, list(ingredient.allergens), ingredient.name)
+        if kind is None:
+            continue
+        if kind != MATCH_ADVISORY:
+            return Finding(ingredient=ingredient, matched_avoid=term)
+        advisory = advisory or Finding(ingredient=ingredient, matched_avoid=term,
+                                       advisory=True)
+    return advisory
 
 
 def allergens_present(dish: Dish) -> set[str]:

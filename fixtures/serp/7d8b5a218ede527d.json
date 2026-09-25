@@ -1,0 +1,41 @@
+[
+  {
+    "source": "tahinis.com",
+    "url": "https://tahinis.com/nutritional-info/",
+    "text": "Delicious and crispy falafels served with tahini or your favourite dip \u2014 available in both six-piece and twelve-piece portions.",
+    "declares": [],
+    "trusted": false
+  },
+  {
+    "source": "foodpro.ucr.edu",
+    "url": "https://foodpro.ucr.edu/foodpro/label.aspx?locationNum=03&locationName=Glasgow&dtdate=9%2F2%2F2026&RecNumAndPort=350069*1",
+    "text": "Allergens Contains Sesame Sesame Ingredients. Raw Tahini (pure sesame ), Water, Lemon Juice, Garlic, Kosher Salt \u2026 cause allergic reactions. These allergens ...",
+    "declares": [
+      "sesame"
+    ],
+    "trusted": false
+  },
+  {
+    "source": "recipetineats.com",
+    "url": "https://www.recipetineats.com/tahini-sauce/",
+    "text": "Ingredients ; 1/4 cup tahini , hulled (Note 1) ; 2 1/2 \u2013 3 tbsp water (Note 2) ; 1 tbsp lemon juice (Note 3) ; 1/2 garlic clove , pressed through ...",
+    "declares": [],
+    "trusted": false
+  },
+  {
+    "source": "justinecooksvegan.com",
+    "url": "https://justinecooksvegan.com/sweet-and-savory-tahini-sauce-vegan-gluten-free/",
+    "text": "What Ingredients are used to make this Sweet and Savory Tahini Dressing: \u00b7 Tahini \u00b7 Lime Juice \u00b7 Coconut Aminos (my favorite secret ingredient, ...",
+    "declares": [],
+    "trusted": false
+  },
+  {
+    "source": "minimalistbaker.com",
+    "url": "https://minimalistbaker.com/3-ingredient-tahini-sauce-everything/",
+    "text": "Ingredients \u00b7 1/2 cup tahini (from raw or roasted sesame seeds) \u00b7 1/4 tsp tsp sea salt (plus more to taste) \u00b7 1/4 tsp garlic powder \u00b7 1/4 cup warm water (plus more ...",
+    "declares": [
+      "sesame"
+    ],
+    "trusted": false
+  }
+]
