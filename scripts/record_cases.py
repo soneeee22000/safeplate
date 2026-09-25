@@ -21,8 +21,6 @@ OUTPUT = Path(__file__).resolve().parent.parent / "web" / "src" / "data" / "symp
 #: (request, kitchen answer or None). The kitchen answer is only reached when the
 #: label and the workshop declaration both come up silent.
 CASES: list[tuple[str, str | None]] = [
-    ("I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?", None),
-    ("I am coeliac. Can I eat the gnocchis pesto vegan?", None),
     ("I am allergic to fish. Can I have the paella?", None),
     ("I am allergic to shellfish. Can I eat the paella?",
      "Non - bac scelle en usine, aucun crustace dans ce plat ni en service"),

@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from . import languages
+from .allergens import ADVISORIES, advisories, expand
 from .config import GENERATION_TEMPERATURE, MODEL_NAME
-from .menu_symphony import VEGAN_MISREAD_WHY
 from .speech import SpeechError, _content, _post
 
 if TYPE_CHECKING:
     from .loop import Run
+    from .menu_symphony import LabelConflict, LabelReport
 
 SYSTEM_PROMPT = """\
 You write the short message a waiter shows to a diner about their food request.
@@ -40,6 +42,7 @@ OFFER_PATTERNS = (
     "we could", "i could", "we can do", "we can omit", "i can omit",
     "can be made without", "can be prepared without", "instead we can",
     "without any added", "without the added", "happy to make", "able to make",
+    "alternative:",
 )
 
 #: Offers of a *different* dish are legitimate after a refusal, so they survive.
@@ -48,6 +51,46 @@ ALTERNATIVE_PHRASES = (
     "other options", "from the menu",
 )
 
+def advisory_sentence(ingredient: str) -> str:
+    """What the diner reads about an ingredient that carries an advisory."""
+    notes = " ".join(ADVISORIES[advisory] for advisory in advisories(ingredient))
+    return f"{ingredient[:1].upper()}{ingredient[1:]}: {notes[:1].lower()}{notes[1:]}"
+
+
+#: What the kitchen's structured call means, in words a diner can read.
+KITCHEN_RISK_SENTENCES = {
+    "risk": "The kitchen says {allergen} could reach this plate.",
+    "unsure": "The kitchen could not confirm that {allergen} stays off this plate.",
+}
+KITCHEN_CLEAR = "The kitchen confirmed no risk of {allergen} on this plate."
+KITCHEN_CLEAR_UNCONFIRMED = "The kitchen answered no risk, but not clearly enough to confirm it."
+
+
+def kitchen_sentence(run: Run) -> str:
+    """The kitchen's answer as the diner reads it: never the raw `none`/`risk` value.
+
+    A structured call becomes a sentence naming the allergen, followed by the
+    chef's own note when there is one. A free-text answer is quoted as given.
+    """
+    risk = run.kitchen_risk
+    note = run.kitchen_note or ("" if risk else (run.kitchen_answer or "").strip())
+    if risk is None:
+        return f"The kitchen said: \u201c{note}\u201d" if note else ""
+    avoided = run.intent.avoid if run.intent else []
+    allergen = ", ".join(avoided) or "the allergen"
+    if risk == "none":
+        template = KITCHEN_CLEAR if run.verdict == "verified" else KITCHEN_CLEAR_UNCONFIRMED
+    else:
+        template = KITCHEN_RISK_SENTENCES.get(risk, KITCHEN_RISK_SENTENCES["unsure"])
+    sentence = template.format(allergen=allergen)
+    return f"{sentence} Kitchen note: \u201c{note}\u201d" if note else sentence
+
+
+#: Who wrote the reply the diner reads, so the trace credits the right engine.
+WRITER_GEMMA = "gemma"
+WRITER_TRANSLATED = "gemma-translated-fallback"
+WRITER_RULE = "rule-fallback"
+
 VERDICT_OPENERS = {
     "verified": "The request can be met.",
     "needs_confirmation": "We cannot confirm this yet.",
@@ -55,7 +98,7 @@ VERDICT_OPENERS = {
 }
 
 
-def _facts(run: "Run") -> str:
+def _facts(run: Run) -> str:
     """Everything the model is allowed to use, and nothing else."""
     lines: list[str] = [
         f"Outcome: {VERDICT_OPENERS.get(run.verdict or '', 'Unresolved')}",
@@ -81,9 +124,12 @@ def _facts(run: "Run") -> str:
                 f"{finding.ingredient.name}, or with less of it, or with it on the "
                 f"side. It is impossible. Suggest a different dish from the menu."
             )
-        for finding in assessment.adjustable:
-            substitute = finding.ingredient.substitute or f"omit the {finding.ingredient.name}"
-            lines.append(f"Can adjust {finding.ingredient.name} — {substitute}")
+        if run.verdict != "do_not_serve":
+            for finding in assessment.adjustable:
+                substitute = finding.ingredient.substitute or f"omit the {finding.ingredient.name}"
+                lines.append(f"Can adjust {finding.ingredient.name} — {substitute}")
+        for finding in assessment.advisory:
+            lines.append(f"ASK THE DINER: {advisory_sentence(finding.ingredient.name)}")
     elif assessment and assessment.unknown_dish:
         lines.append("This dish is not in our verified list, so nothing can be confirmed.")
 
@@ -91,15 +137,12 @@ def _facts(run: "Run") -> str:
     if report is not None:
         lines.append(f"Dish: {report.dish.name} ({report.dish.weight_grams} g, sealed tray)")
         for conflict in report.label_conflicts:
-            bold = "in the bold allergen text" if conflict.declared else (
-                "listed in the ingredients but NOT in bold, so easy to miss"
-            )
             lines.append(
                 f"ON THE LABEL: {conflict.ingredient.name} ({conflict.ingredient.gloss}) — "
-                f"{bold}. {conflict.ingredient.why}"
+                f"{_label_status(conflict, report)}. {conflict.ingredient.why}"
             )
-        for allergen in report.vegan_misreads:
-            lines.append(f"IMPORTANT: {VEGAN_MISREAD_WHY.get(allergen, '')}")
+        for sentence in report.vegan_misreads:
+            lines.append(f"IMPORTANT: {sentence}")
         if report.shared_facility_matches:
             lines.append(
                 f"The label says: {report.shared_facility.declaration_en} "
@@ -108,12 +151,29 @@ def _facts(run: "Run") -> str:
             )
 
     for statement in run.statements:
-        lines.append(f"Source {statement.source}: {statement.text}")
+        label = "Source" if statement.trusted else "Unverified web source"
+        lines.append(f"{label} {statement.source}: {statement.text}")
 
-    if run.kitchen_answer:
-        lines.append(f"The kitchen said: {run.kitchen_answer}")
+    kitchen = kitchen_sentence(run)
+    if kitchen:
+        lines.append(kitchen)
 
     return "\n".join(lines)
+
+
+def _label_status(conflict: LabelConflict, report: LabelReport) -> str:
+    """How the label presents a conflicting ingredient, stated without overclaiming."""
+    if conflict.advisory:
+        return f"not an EU-14 allergen, so correctly not in bold; {ADVISORIES_HINT}"
+    if conflict.declared:
+        return "in the bold allergen text"
+    if conflict in report.undeclared_conflicts:
+        return "listed in the ingredients but NOT in bold, so easy to miss"
+    return "listed in the ingredients"
+
+
+#: The advisory clause the model is given, beside a compliant label.
+ADVISORIES_HINT = "often avoided by tree-nut-allergic diners — ask the diner"
 
 
 def _write(facts: str, language: str) -> str:
@@ -134,13 +194,13 @@ def _write(facts: str, language: str) -> str:
     return _content(reply)
 
 
-def contradicts_refusal(text: str, run: "Run") -> bool:
+def contradicts_refusal(text: str, run: Run) -> bool:
     """True when the generated message offers what the loop already refused.
 
-    Measured, not hypothetical: handed `do_not_serve` and the reason that fish
+    Observed in development: handed `do_not_serve` and the reason that fish
     sauce is structural to pad thai, E2B wrote *"We can offer you the Pad Thai
-    without any added fish sauce instead."* — the exact sentence that would put
-    an allergic diner in an ambulance.
+    without any added fish sauce instead."* — offering the dish the loop had
+    just refused. A model reply must never overrule a refusal.
 
     A language model is never the last line of defence, and that has to include
     its own prose. This check is deterministic; failing it discards the text.
@@ -163,11 +223,14 @@ def contradicts_refusal(text: str, run: "Run") -> bool:
     return not any(phrase in lowered for phrase in ALTERNATIVE_PHRASES)
 
 
-def compose_reply(run: "Run") -> tuple[str, str]:
-    """Return the message in the diner's language, and the same in English.
+def compose_reply(run: Run) -> tuple[str, str, str]:
+    """Return the message in the diner's language, the same in English, and its writer.
 
     Falls back to a plain assembled message if the model is unreachable or if it
-    writes something that contradicts the verdict.
+    writes something that contradicts the verdict. The writer is `WRITER_GEMMA`
+    when the model wrote the text, `WRITER_TRANSLATED` when it only translated
+    the assembled message, and `WRITER_RULE` when the assembled message is used
+    as it stands.
     """
     facts = _facts(run)
     language = run.intent.language if run.intent else "en"
@@ -182,21 +245,68 @@ def compose_reply(run: "Run") -> tuple[str, str]:
         if contradicts_refusal(english, run):
             safe = _fallback(run)
             if language.startswith("en"):
-                return safe, safe
+                return safe, safe, WRITER_RULE
             translated = _translate(safe, language)
-            return (safe if contradicts_refusal(translated, run) else translated), safe
+            if contradicts_refusal(translated, run):
+                return safe, safe, WRITER_RULE
+            return translated, safe, WRITER_TRANSLATED
 
         if language.startswith("en"):
-            return english, english
+            return english, english, WRITER_GEMMA
 
         original = _write(facts, language)
         if contradicts_refusal(original, run):
             translated = _translate(english, language)
-            return (english if contradicts_refusal(translated, run) else translated), english
-        return original, english
+            shown = english if contradicts_refusal(translated, run) else translated
+            return shown, english, WRITER_GEMMA
+        return original, english, WRITER_GEMMA
     except SpeechError:
         message = _fallback(run)
-        return message, message
+        return message, message, WRITER_RULE
+
+
+def compose_rules_reply(run: Run) -> tuple[str, str]:
+    """Return the reply with no model involved, in the diner's language where that is safe.
+
+    The English is `_fallback`, assembled from facts. A diner whose language has
+    hand-checked safety sentences also gets those, ahead of the English, because
+    they were written by a person rather than generated. Every other language —
+    French included, whose sentences have not been checked — gets English alone:
+    a machine-free English answer beats a sentence nobody verified.
+    """
+    english = _fallback(run)
+    if contradicts_refusal(english, run):
+        english = MINIMAL_REFUSAL
+    code = run.intent.language if run.intent else languages.DEFAULT_LANGUAGE_CODE
+    canonical = code.strip().lower().replace("_", "-").split("-")[0]
+    if canonical == languages.DEFAULT_LANGUAGE_CODE or canonical not in languages.SAFETY_PHRASES:
+        return english, english
+    if run.verdict == "verified":
+        return english, english
+    return f"{_checked_sentences(run, canonical)}\n\n{english}", english
+
+
+#: The last resort: a refusal with nothing in it that could read as an offer.
+MINIMAL_REFUSAL = (
+    f"{VERDICT_OPENERS['do_not_serve']} Please speak to a member of staff before ordering."
+)
+
+
+def _checked_sentences(run: Run, code: str) -> str:
+    """The hand-written safety sentences that fit this verdict, in `code`."""
+    avoided = run.intent.avoid if run.intent else []
+    named = list(dict.fromkeys(allergen for term in avoided for allergen in expand(term)))
+    allergen = ", ".join(named)
+    sentences = []
+    if allergen:
+        sentences.append(languages.safety_phrase(languages.NO_GUARANTEE, code, allergen=allergen))
+    report = run.packaged_report
+    if report is not None and report.shared_facility_matches:
+        sentences.append(languages.safety_phrase(
+            languages.SHARED_WORKSHOP, code, allergen=", ".join(report.shared_facility_matches)
+        ))
+    sentences.append(languages.safety_phrase(languages.SPEAK_TO_STAFF, code))
+    return " ".join(sentences)
 
 
 def _translate(text: str, language: str) -> str:
@@ -222,7 +332,12 @@ def _translate(text: str, language: str) -> str:
     return _content(reply)
 
 
-def _fallback(run: "Run") -> str:
+def fixed_reply(run: Run) -> str:
+    """The reply assembled from facts alone, for when nothing else could be written."""
+    return _fallback(run)
+
+
+def _fallback(run: Run) -> str:
     """The message assembled from facts alone, with no model in the loop.
 
     Used when generation is unavailable *or* when it contradicted the verdict.
@@ -236,10 +351,13 @@ def _fallback(run: "Run") -> str:
                 f"The label lists {conflict.ingredient.name} "
                 f"({conflict.ingredient.gloss})."
             )
-            if not conflict.declared:
-                parts.append("It is not in the bold allergen text, which is why it is easy to miss.")
-        for allergen in report.vegan_misreads:
-            parts.append(VEGAN_MISREAD_WHY.get(allergen, ""))
+            if conflict.advisory:
+                parts.append(advisory_sentence(conflict.ingredient.gloss))
+            elif conflict in report.undeclared_conflicts:
+                parts.append(
+                    "It is not in the bold allergen text, which is why it is easy to miss."
+                )
+        parts.extend(report.vegan_misreads)
         if report.shared_facility_matches:
             parts.append(report.shared_facility.declaration_en)
         parts.append("Please speak to a member of staff before ordering.")
@@ -250,9 +368,14 @@ def _fallback(run: "Run") -> str:
                 f"The {finding.ingredient.name} cannot be left out, so this dish is not "
                 "possible for you. We can suggest something else from the menu."
             )
-        for finding in run.assessment.adjustable:
-            if finding.ingredient.substitute:
-                parts.append(f"Alternative: {finding.ingredient.substitute}.")
-    if run.kitchen_answer:
-        parts.append(f"The kitchen said: {run.kitchen_answer}")
+        # A refusal never offers the refused dish back, adjusted or not.
+        if run.verdict != "do_not_serve":
+            for finding in run.assessment.adjustable:
+                if finding.ingredient.substitute:
+                    parts.append(f"Alternative: {finding.ingredient.substitute}.")
+        for finding in run.assessment.advisory:
+            parts.append(advisory_sentence(finding.ingredient.name))
+    kitchen = kitchen_sentence(run)
+    if kitchen:
+        parts.append(kitchen)
     return " ".join(parts)

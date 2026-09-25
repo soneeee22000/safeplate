@@ -1,12 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { History, Radio } from "lucide-react";
 import { TicketLine } from "@/components/evidence-ticket";
+import { ModeBanner, recordedBadge } from "@/components/verify/mode-banner";
 import recordedCases from "@/data/symphony-cases.json";
 import {
   POLL_INTERVAL_MS,
+  checkHealth,
   orchestrator,
-  probeOrchestrator,
+  type AgentMode,
   type CaseRequest,
   type RunState,
 } from "@/lib/orchestrator";
@@ -17,7 +20,7 @@ import {
   type TraceStep,
 } from "@/lib/trace";
 
-const RESTAURANT = "Symphony.fr";
+const MENU_NAME = "Demo menu";
 
 /** Printed unchanged on all three labels. It describes the site, not the dish. */
 const FACILITY_DECLARATION =
@@ -36,9 +39,9 @@ interface DinerLanguage {
 const LANGUAGES: readonly DinerLanguage[] = [
   {
     code: "auto",
-    endonym: "Any language",
-    english: "Detect automatically",
-    example: "Ask in whatever language you speak. The agent works out which.",
+    endonym: "Auto-detect",
+    english: "From your question",
+    example: "Ask in your own words, and name what you cannot eat.",
   },
   {
     code: "my",
@@ -108,18 +111,6 @@ const MENU: readonly MenuDish[] = [
     ],
     undeclared: [],
   },
-  {
-    id: "gnocchis",
-    name: "Gnocchis pesto vegan",
-    grams: 425,
-    plate: "GEBbtKWD",
-    ingredients:
-      "Gnocchis, épinards fermes, huile d’olive, basilic, pignons de pin, " +
-      "gran prosociano violife, levure diététique, jus de citron, ail en " +
-      "poudre, sel, poivre.",
-    declared: ["cereals containing gluten — gnocchis, levure diététique"],
-    undeclared: ["nuts — pignons de pin, a tree nut the label does not bold"],
-  },
 ];
 
 type OrderStatus =
@@ -127,6 +118,7 @@ type OrderStatus =
 
 const ORDER_STATUS: Record<RunState["status"], OrderStatus> = {
   running: "running",
+  answering: "running",
   awaiting_human: "awaiting_staff",
   complete: "complete",
   failed: "failed",
@@ -206,7 +198,14 @@ interface OrderRun {
 /** A recorded run, with the request that produced it. */
 type RecordedCase = Trace & { request: string };
 
+/** Every Symphony recording was made with Gemma 4 E2B loaded. */
 const RECORDED: RecordedCase[] = recordedCases as unknown as RecordedCase[];
+
+/** The badge for whatever is producing the ticket on screen. */
+function sourceLabel(mode: AgentMode | null): string {
+  if (!mode) return recordedBadge("gemma");
+  return mode === "gemma" ? "Live · Gemma 4 E2B" : "Live · rules mode";
+}
 
 const REPLAY_STEP_MS = 900;
 
@@ -401,6 +400,7 @@ function useOrderRun(live: boolean): OrderRun {
  */
 export function DinerOrder() {
   const [backend, setBackend] = useState<BackendState>("probing");
+  const [mode, setMode] = useState<AgentMode | null>(null);
   const [language, setLanguage] = useState<string>(LANGUAGES[0].code);
   const [dishId, setDishId] = useState<string | null>(null);
   const [decision, setDecision] = useState<DinerDecision | null>(null);
@@ -408,8 +408,11 @@ export function DinerOrder() {
 
   useEffect(() => {
     const controller = new AbortController();
-    probeOrchestrator(controller.signal)
-      .then((reachable) => setBackend(reachable ? "live" : "offline"))
+    checkHealth(controller.signal)
+      .then((found) => {
+        setMode(found);
+        setBackend(found ? "live" : "offline");
+      })
       .catch(() => setBackend("offline"));
     return () => controller.abort();
   }, []);
@@ -458,6 +461,16 @@ export function DinerOrder() {
       <LanguageChooser value={language} onChange={setLanguage} />
 
       {backend === "offline" && <OfflineNotice />}
+      {backend === "live" && mode && (
+        <div className="max-w-xl">
+          <ModeBanner
+            connection={{ kind: "live", mode }}
+            replayRecordedWith={null}
+            onSkip={() => undefined}
+            onRetry={() => undefined}
+          />
+        </div>
+      )}
 
       <MenuBoard selectedId={dishId} onSelect={chooseDish} disabled={busy} />
 
@@ -468,6 +481,7 @@ export function DinerOrder() {
           onSubmit={ask}
           disabled={busy}
           offline={backend === "offline"}
+          canHear={backend === "live" && mode === "gemma"}
         />
       )}
 
@@ -475,6 +489,7 @@ export function DinerOrder() {
         {run.view.status !== "idle" && dish && (
           <RunTicket
             dish={dish}
+            source={backend === "live" ? mode : null}
             view={run.view}
             decision={decision}
             onAnswerStaff={run.answerStaff}
@@ -495,7 +510,7 @@ function LanguageChooser({
 }) {
   return (
     <section>
-      <h2 className="font-mono text-[0.7rem] tracking-[0.25em] uppercase">
+      <h2 className="font-mono text-xs tracking-[0.25em] uppercase">
         Your language
       </h2>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -513,15 +528,14 @@ function LanguageChooser({
             }`}
           >
             <span className="block text-base leading-6">{option.endonym}</span>
-            <span className="block font-mono text-[0.65rem] tracking-wider uppercase opacity-70">
+            <span className="block font-mono text-xs tracking-wider uppercase opacity-70">
               {option.english}
             </span>
           </button>
         ))}
       </div>
       <p className="text-muted-foreground mt-3 max-w-xl text-sm leading-6">
-        This changes the examples on this screen. The agent answers in the
-        language you actually speak, whichever one that turns out to be.
+        This changes the examples on this screen.
       </p>
     </section>
   );
@@ -535,8 +549,9 @@ function OfflineNotice() {
       </h2>
       <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-6">
         Gemma 4 is a 7.2 GB model that runs on a laptop, not on this page. What
-        you see below are real runs of the agent against these real labels,
-        replayed step by step — not a live check of your food.
+        you see below are real Gemma runs of the agent against these labels,
+        replayed step by step and badged as recordings — not a live check of
+        your food.
       </p>
       <p className="text-confirm-lit mt-2 max-w-2xl text-sm leading-6">
         So nothing here has been checked for you. If you are ordering, ask a
@@ -558,8 +573,8 @@ function MenuBoard({
 }) {
   return (
     <section>
-      <h2 className="font-mono text-[0.7rem] tracking-[0.25em] uppercase">
-        {RESTAURANT} — today
+      <h2 className="font-mono text-xs tracking-[0.25em] uppercase">
+        {MENU_NAME} (labels transcribed from a Paris shop)
       </h2>
       <ul className="mt-4 grid gap-4 md:grid-cols-3">
         {MENU.map((dish) => (
@@ -605,7 +620,7 @@ function DishCard({
           : "border-console-line hover:border-paper/60"
       }`}
     >
-      <span className="text-muted-foreground font-mono text-[0.65rem] tracking-wider uppercase">
+      <span className="text-muted-foreground font-mono text-xs tracking-wider uppercase">
         {dish.grams} g · plat {dish.plate}
       </span>
       <span className="font-display mt-2 text-lg leading-6 font-semibold">
@@ -619,7 +634,7 @@ function DishCard({
         {dish.declared.map((item) => (
           <span
             key={item}
-            className="text-confirm-lit block font-mono text-[0.7rem] leading-5"
+            className="text-confirm-lit block font-mono text-xs leading-5"
           >
             declared · {item}
           </span>
@@ -627,7 +642,7 @@ function DishCard({
         {dish.undeclared.map((item) => (
           <span
             key={item}
-            className="text-refuse block font-mono text-[0.7rem] leading-5"
+            className="text-refuse block font-mono text-xs leading-5"
           >
             not in bold · {item}
           </span>
@@ -643,12 +658,15 @@ function AskBox({
   onSubmit,
   disabled,
   offline,
+  canHear,
 }: {
   dish: MenuDish;
   language: string;
   onSubmit: (request: CaseRequest) => void;
   disabled: boolean;
   offline: boolean;
+  /** True only when a live agent with Gemma loaded can hear a recording. */
+  canHear: boolean;
 }) {
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
@@ -699,44 +717,49 @@ function AskBox({
         word for it in French, and you do not have to be right about the dish.
       </p>
 
-      <button
-        type="button"
-        onClick={recording ? stopRecording : startRecording}
-        disabled={disabled}
-        aria-pressed={recording}
-        className={`mt-5 flex min-h-14 w-full items-center justify-center gap-3 border px-5 font-mono text-sm tracking-wider uppercase transition-colors disabled:opacity-40 ${
-          recording
-            ? "border-refuse text-refuse"
-            : "border-paper text-paper hover:bg-paper hover:text-console"
-        }`}
-      >
-        <span
-          className={`h-3 w-3 rounded-full ${recording ? "bg-refuse animate-pulse" : "bg-paper"}`}
-          aria-hidden="true"
-        />
-        {recording ? "Stop and send" : "Speak your question"}
-      </button>
+      {canHear && (
+        <>
+          <button
+            type="button"
+            onClick={recording ? stopRecording : startRecording}
+            disabled={disabled}
+            aria-pressed={recording}
+            className={`mt-5 flex min-h-14 w-full items-center justify-center gap-3 border px-5 font-mono text-sm tracking-wider uppercase transition-colors disabled:opacity-40 ${
+              recording
+                ? "border-refuse text-refuse"
+                : "border-paper text-paper hover:bg-paper hover:text-console"
+            }`}
+          >
+            <span
+              className={`h-3 w-3 rounded-full ${recording ? "bg-refuse animate-pulse" : "bg-paper"}`}
+              aria-hidden="true"
+            />
+            {recording ? "Stop and send" : "Speak your question"}
+          </button>
 
-      <p className="text-muted-foreground mt-2 text-xs leading-5">
-        Name the dish out loud as part of the question. The agent listens to the
-        recording itself, not to the card you tapped.
-      </p>
+          <p className="text-muted-foreground mt-2 text-xs leading-5">
+            Name the dish out loud as part of the question. The agent listens to the
+            recording itself, not to the card you tapped.
+          </p>
 
-      {micError && (
-        <p className="text-confirm-lit mt-2 font-mono text-xs leading-5">
-          {micError}
-        </p>
+          {micError && (
+            <p className="text-confirm-lit mt-2 font-mono text-xs leading-5">
+              {micError}
+            </p>
+          )}
+
+          <div className="my-5 flex items-center gap-3">
+            <span className="bg-console-line h-px flex-1" aria-hidden="true" />
+            <span className="text-muted-foreground font-mono text-xs tracking-widest uppercase">
+              or type it
+            </span>
+            <span className="bg-console-line h-px flex-1" aria-hidden="true" />
+          </div>
+        </>
       )}
 
-      <div className="my-5 flex items-center gap-3">
-        <span className="bg-console-line h-px flex-1" aria-hidden="true" />
-        <span className="text-muted-foreground font-mono text-[0.65rem] tracking-widest uppercase">
-          or type it
-        </span>
-        <span className="bg-console-line h-px flex-1" aria-hidden="true" />
-      </div>
-
       <form
+        className={canHear ? undefined : "mt-5"}
         onSubmit={(event) => {
           event.preventDefault();
           if (text.trim()) onSubmit({ text: text.trim() });
@@ -767,12 +790,15 @@ function AskBox({
 
 function RunTicket({
   dish,
+  source,
   view,
   decision,
   onAnswerStaff,
   onDecide,
 }: {
   dish: MenuDish;
+  /** The live agent's mode, or null when the ticket is a recording. */
+  source: AgentMode | null;
   view: OrderView;
   decision: DinerDecision | null;
   onAnswerStaff: (text: string) => Promise<void>;
@@ -783,8 +809,9 @@ function RunTicket({
       <div className="ticket-edge" aria-hidden="true" />
       <div className="bg-paper text-ink px-6 py-7 sm:px-9">
         <header className="border-ink/25 border-b pb-4">
-          <p className="font-mono text-[0.7rem] tracking-[0.2em] uppercase">
-            {RESTAURANT} · plat {dish.plate}
+          <SourceBadge mode={source} />
+          <p className="mt-3 font-mono text-xs tracking-[0.2em] uppercase">
+            {MENU_NAME} · plat {dish.plate}
           </p>
           <h3 className="font-display mt-1 text-xl font-semibold">
             {dish.name}
@@ -821,6 +848,23 @@ function RunTicket({
   );
 }
 
+/** Says whether the ticket is the live agent (and in which mode) or a recording. */
+function SourceBadge({ mode }: { mode: AgentMode | null }) {
+  const Icon = mode ? Radio : History;
+  return (
+    <p
+      className={`inline-flex items-center gap-1.5 border-2 px-2 py-1 font-mono text-xs font-semibold tracking-wider uppercase ${
+        mode
+          ? "border-verified text-verified-ink"
+          : "border-confirm text-confirm-ink"
+      }`}
+    >
+      <Icon className="size-4" aria-hidden="true" />
+      {sourceLabel(mode)}
+    </p>
+  );
+}
+
 function RunFailed({ error }: { error?: string }) {
   return (
     <div className="border-refuse mt-5 border-l-2 pl-3">
@@ -853,7 +897,7 @@ function StaffPrompt({
 
   return (
     <div className="border-pen mt-6 border-l-2 pl-4">
-      <p className="text-pen font-mono text-[0.7rem] tracking-wider uppercase">
+      <p className="text-pen font-mono text-xs tracking-wider uppercase">
         This needs a person
       </p>
       <p className="text-ink mt-2 font-semibold">{question}</p>

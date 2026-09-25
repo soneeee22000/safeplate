@@ -25,19 +25,33 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
+const SITE_URL = "https://safeplate-ten.vercel.app";
+const DEFAULT_TITLE = "SafePlate — the model hears, the code decides";
+const DESCRIPTION =
+  "SafePlate (hackathon project): an allergen agent on Gemma 4 E2B where the model only hears and speaks and deterministic code decides. It checks the dish and the EU-14 allergens, forces a SerpApi lookup and one question to the kitchen, then answers or refuses with a reason.";
+
 export const metadata: Metadata = {
-  title:
-    "SafePlate — allergen verification that refuses when it cannot be sure",
-  description:
-    "A Gemma 4 agent that reads a food label, checks it against the EU-14 allergen table, searches the manufacturer's declaration, asks the kitchen about cross-contact, and refuses to clear a dish it cannot verify.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: DEFAULT_TITLE,
+    template: "%s — SafePlate",
+  },
+  description: DESCRIPTION,
   openGraph: {
-    title: "SafePlate",
-    description:
-      "Allergen verification that refuses when it cannot be sure. Gemma 4 Hackathon Paris — Track 2, Autonomous Agents.",
+    title: DEFAULT_TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    siteName: "SafePlate",
     type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: DEFAULT_TITLE,
+    description: DESCRIPTION,
   },
 };
 
+/** Root layout: fonts, global styles, and site-wide metadata. */
 export default function RootLayout({
   children,
 }: Readonly<{

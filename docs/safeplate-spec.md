@@ -1,3 +1,5 @@
+> Status: event-day design doc; see the [README](../README.md) for what shipped.
+
 # SafePlate — technical spec
 
 **Gemma 4 Hackathon | Paris · Track 2 — Autonomous Agents · 25 July 2026**

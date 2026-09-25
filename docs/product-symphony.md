@@ -1,3 +1,5 @@
+> Status: event-day design doc; see the [README](../README.md) for what shipped.
+
 # SafePlate as an ordering companion — the Symphony.fr onboarding
 
 **Status: product framing. Supersedes the persona section of
@@ -148,8 +150,9 @@ celery-allergic diner reading a French label at speed will miss it.
 > Élaboré dans un atelier qui utilise : gluten, céleri, moutarde, arachides, poisson,
 > œufs, soja, lait, fruits à coque, sésame.
 
-Declared: **gluten**, twice. Not declared in bold, and present: `pignons de pin` — pine
-nuts, a tree nut, `fruits à coque`. See §6.
+Declared: **gluten**, twice. Also present, and correctly not in bold: `pignons de pin` —
+pine nuts, which are not an EU-14 allergen. The label is compliant; the gap is for the
+diners who avoid pine nuts anyway. See §6.
 
 ---
 
@@ -190,10 +193,15 @@ _this kitchen handles it_, because those two facts lead to different decisions.
 
 ---
 
-## 6. The worked example: the vegan dish that contains tree nuts
+## 6. The worked example: the vegan dish that contains pine nuts
 
-Dish 3 is marketed as **vegan**. It contains `pignons de pin` — pine nuts — which are tree
-nuts, `fruits à coque`, one of the EU 14. The label does not bold them.
+Dish 3 is marketed as **vegan**. It contains `pignons de pin` — pine nuts. Pine nuts are
+**not** one of the EU 14: Regulation (EU) No 1169/2011, Annex II, point 8 lists almonds,
+hazelnuts, walnuts, cashews, pecans, Brazil nuts, pistachios and macadamias, and nothing
+else. The label is therefore compliant in not bolding them. The gap is in the regulation,
+not the label: many tree-nut-allergic diners avoid pine nuts all the same. SafePlate carries
+them as an advisory — _not an EU-14 allergen, often avoided by tree-nut-allergic diners, ask_
+— which holds a nut-allergic diner at `needs_confirmation` and never clears them silently.
 
 This is the case the whole product is built around, and it fails in four separate ways at
 once:
@@ -201,11 +209,11 @@ once:
 | Failure               | What happens                                                                                                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **The word "vegan"**  | Describes animal products, not allergens. It says nothing about gluten and nothing about nuts. A nut-allergic diner scanning a menu for a safe option reads "vegan" as "plant, therefore fine". |
-| **The bolding**       | Pine nuts are not bold on this label. A diner who has learned to scan for bold text will scan straight past them.                                                                               |
-| **The language**      | `pignons de pin` is not a phrase a non-French speaker maps to "tree nut", and a phrase-book translation gives "pine kernels", which sounds like a seed.                                         |
+| **The bolding**       | Pine nuts are correctly not bold — they are not an EU-14 allergen. A diner who has learned to scan for bold text will still scan straight past them.                                           |
+| **The language**      | `pignons de pin` is not a phrase a non-French speaker maps to "nut", and a phrase-book translation gives "pine kernels", which sounds like a seed.                                              |
 | **The facility line** | Even with the pine nuts removed, `fruits à coque` is on the shared-facility list. The dish could not be cleared for a severe nut allergy anyway.                                                |
 
-**Both true at once: this dish is vegan, and it contains gluten twice and a tree nut.**
+**Both true at once: this dish is vegan, and it contains gluten twice and pine nuts.**
 Those are not contradictory statements. They are the reason a dietary label and an allergen
 answer are different products.
 
@@ -213,15 +221,18 @@ How SafePlate answers a nut-allergic diner who asks about the gnocchi:
 
 1. `understand_request` (Gemma) — hears the question in the diner's language, extracts
    `{dish: gnocchis pesto vegan, avoid: [nuts]}`.
-2. `assess_dish` (rule) — `pignons de pin` normalises to `nuts` through the synonym table
-   in [`safeplate/allergens.py`](../safeplate/allergens.py); `pignon` is already in it.
-   Pine nuts in a pesto are **structural**, exactly as encoded for `pesto pasta` in
-   [`safeplate/dishes.py`](../safeplate/dishes.py) — remove them and it is chopped basil in
-   oil. The finding is blocking.
+2. `read_label` (rule) — the tray is sealed, so its own label decides. `pignons de pin`
+   does **not** normalise to `nuts`: it carries the tree-nut-adjacent advisory in
+   `ADVISORY_TERMS` in [`safeplate/allergens.py`](../safeplate/allergens.py), because pine
+   nuts are not an EU-14 allergen and the label is right not to bold them. An advisory is
+   never cleared silently, so the loop escalates and holds the case at
+   `needs_confirmation`: only the diner can say whether they avoid pine nuts.
 3. The site's facility declaration adds `fruits à coque` independently of the recipe.
-4. `compose_reply` (Gemma) — states, in the diner's language: the dish contains pine nuts
-   which are tree nuts; they cannot be removed because they are the pesto; and separately,
-   this kitchen handles nuts, so no dish here can be guaranteed nut-free.
+4. `compose_reply` (Gemma) — states, in the diner's language: this cannot be confirmed
+   yet; the dish contains pine nuts, which are not an EU-14 allergen but are often avoided
+   by tree-nut-allergic diners, so ask; they are blended into the sealed sauce, so there
+   is no version without them; and separately, this kitchen handles tree nuts, so no dish
+   here can be guaranteed nut-free.
 5. **The choices**, which is the part that keeps the sale: the paella and the bolognese
    also carry the facility declaration, so none of the three clears a severe nut allergy —
    the honest option set is _speak to the manager_, or _this is not the right kitchen
@@ -248,7 +259,7 @@ than from generation:
 | What else fits            | The same assessment run across the rest of the menu                 |
 
 Gemma phrases this in the diner's language. It does not decide any of it. The refusal
-guardrail described in [`docs/kaggle-writeup.md`](kaggle-writeup.md) still applies: any
+guardrail described in [`docs/hackathon/kaggle-writeup.md`](hackathon/kaggle-writeup.md) still applies: any
 generated sentence that offers to make or adjust a refused dish is discarded in favour of
 text assembled from facts, then translated.
 

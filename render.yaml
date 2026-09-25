@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: safeplate-orchestrator
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: SAFEPLATE_MODE
+        value: rules
+      - key: SAFEPLATE_CORS_ORIGINS
+        value: https://safeplate-ten.vercel.app,http://localhost:3000
+      - key: SERPAPI_KEY
+        sync: false

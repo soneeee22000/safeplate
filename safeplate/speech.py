@@ -7,7 +7,7 @@ module talks to that endpoint instead. Verified against gemma4:e2b on Ollama
 0.32.3: a spoken English request transcribed correctly in 10.1s.
 
 One call does transcription *and* intent extraction. Splitting them would mean
-two round trips through a 5B model and a lost opportunity: the model resolves
+two round trips through a small model and a lost opportunity: the model resolves
 "without the fish sauce" against the dish it just heard named, which a
 transcribe-then-parse pipeline has to rediscover.
 """
@@ -68,6 +68,9 @@ class Intent:
     avoid: list[str] = field(default_factory=list)
     request_type: str = "question"
     notes: str | None = None
+    #: Words the diner gave as allergies that could not be matched to one. The
+    #: loop stops on any, rather than check the dish against a partial list.
+    unrecognised: list[str] = field(default_factory=list)
 
     @property
     def actionable(self) -> bool:

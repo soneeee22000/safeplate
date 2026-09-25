@@ -1,17 +1,8 @@
-# SafePlate — dependencies
-# The model and OCR run locally; only the product lookup leaves the machine.
+# SafePlate — runtime dependencies only. Development tools: requirements-dev.txt.
+# The model runs in a local Ollama daemon, reached over its HTTP API with the
+# standard library, so no model client is installed here. Audio is transcoded by
+# an ffmpeg binary on PATH when one is present.
 
-ollama==0.4.7            # local Gemma 4 client (generation, tool-calling)
-pytesseract==0.3.13      # wrapper around the local Tesseract binary
-pillow==12.3.0           # image loading for label photos
-
-# --- orchestrator ---
-fastapi==0.139.2         # agent loop HTTP surface
-uvicorn==0.51.0          # server
-python-multipart         # label photo upload
-
-# --- external evidence ---
-requests==2.32.3         # SerpApi product / allergen lookup
-
-# --- dev ---
-pytest==9.1.1
+fastapi==0.139.2         # orchestrator HTTP surface
+uvicorn==0.51.0          # ASGI server
+python-multipart==0.0.32 # form fields and audio uploads on POST /api/case

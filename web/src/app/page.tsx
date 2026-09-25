@@ -1,12 +1,25 @@
-import type { Metadata } from "next";
-import { HomeLanding } from "@/components/home-landing";
+import { Finding } from "@/components/landing/finding";
+import { Hero } from "@/components/landing/hero";
+import { Layers } from "@/components/landing/layers";
+import { Numbers } from "@/components/landing/numbers";
+import { ProductNote } from "@/components/landing/product-note";
+import { Scene } from "@/components/landing/scene";
+import { SiteFooter, SiteHeader } from "@/components/site-chrome";
 
-export const metadata: Metadata = {
-  title: "SafePlate — order like a local, feel at home",
-  description:
-    "A Gemma 4 agent that hears a diner in their own language, checks the dish against its real label, asks the kitchen what no label can answer, and refuses when it cannot be sure.",
-};
-
+/** The landing page: one story, told in the order a visitor needs it. */
 export default function Home() {
-  return <HomeLanding />;
+  return (
+    <div id="top">
+      <SiteHeader />
+      <main>
+        <Hero />
+        <Scene />
+        <Finding />
+        <Layers />
+        <Numbers />
+        <ProductNote />
+      </main>
+      <SiteFooter />
+    </div>
+  );
 }

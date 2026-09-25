@@ -1,0 +1,203 @@
+{
+  "case_id": "SP-A9F8DB20",
+  "restaurant": "SafePlate demo service",
+  "dish": "Pad thai",
+  "allergen": "fish, fish sauce",
+  "diner_language": "en",
+  "verdict": "do_not_serve",
+  "total_ms": 4,
+  "steps": [
+    {
+      "n": 1,
+      "tool": "understand_request",
+      "engine": "rule",
+      "title": "Rules read the typed request",
+      "reasoning": "No model on this host. The dish and the allergens are matched against the same tables the loop decides with; anything not recognised is left empty, so the loop asks instead of guessing.",
+      "forced": false,
+      "args": {
+        "input": "text"
+      },
+      "result": {
+        "utterance": "I'm allergic to fish — can I have the pad thai without fish sauce?",
+        "language": "en",
+        "dish": "pad thai",
+        "avoid": [
+          "fish",
+          "fish sauce"
+        ],
+        "request_type": "modification"
+      },
+      "duration_ms": 3,
+      "note": "Rules mode — keyword matching, no model."
+    },
+    {
+      "n": 2,
+      "tool": "assess_dish",
+      "engine": "rule",
+      "title": "The dish table decides what can come out",
+      "reasoning": "Whether an ingredient is structural is data, not generation. A small model guessing at culinary structure is exactly what this avoids.",
+      "forced": false,
+      "args": {
+        "dish": "pad thai",
+        "avoid": [
+          "fish",
+          "fish sauce"
+        ]
+      },
+      "result": {
+        "outcome": "cannot_modify",
+        "blocking": [
+          {
+            "ingredient": "fish sauce",
+            "role": "structural",
+            "why": "Fish sauce is the salt and the backbone of pad thai. Without it the dish has no seasoning base — it is not a garnish that can be left off."
+          }
+        ],
+        "adjustable": [],
+        "advisory": []
+      },
+      "duration_ms": 0
+    },
+    {
+      "n": 3,
+      "tool": "lookup_product",
+      "engine": "external",
+      "title": "SerpApi — what the manufacturer declares",
+      "reasoning": "'fish sauce' arrives in a jar. What is actually in it is the manufacturer's declaration, not our table.",
+      "forced": true,
+      "args": {
+        "product": "fish sauce"
+      },
+      "result": {
+        "statements": [
+          {
+            "source": "logifoodcoach.com",
+            "url": "https://logifoodcoach.com/database/en/fish-sauce/",
+            "text": "Allergens Contains: fish All foods without gluten All foods without milk All foods without eggs All foods without crustaceans",
+            "declares": [
+              "crustacean",
+              "crustaceans",
+              "eggs",
+              "fish",
+              "milk"
+            ],
+            "trusted": false
+          },
+          {
+            "source": "supermarketguru.com",
+            "url": "https://www.supermarketguru.com/articles/shopping-for-a-shellfish-allergy/",
+            "text": "There are eight common allergens: peanuts, tree nuts, soy, wheat, eggs, milk, fish and shellfish. Asian restaurants also use fish sauce in many ...",
+            "declares": [
+              "cereals containing gluten",
+              "eggs",
+              "fish",
+              "milk",
+              "nuts",
+              "peanuts",
+              "soybeans"
+            ],
+            "trusted": false
+          },
+          {
+            "source": "sangthai.co.uk",
+            "url": "http://www.sangthai.co.uk/allergen-advice/",
+            "text": "Most of these dishes contain gluten from oyster and soya sauces, dipping sauce for 2 Soya beans, as tofu or in soy sauce.",
+            "declares": [
+              "soybeans"
+            ],
+            "trusted": false
+          },
+          {
+            "source": "waiyeehong.com",
+            "url": "https://www.waiyeehong.com/food-ingredients/sauces-oils/soy-sauce-fish-sauce/ca-com-brand-fish-sauce?cPath=3_47&",
+            "text": "Allergy Advice: Contains Fish. Store in a cool dry place. Ingredients: Anchovy Extract (70%), Salt, Sugar, Flavour Enhancer (Monosodium Glutamate ...",
+            "declares": [
+              "fish"
+            ],
+            "trusted": false
+          },
+          {
+            "source": "world.openfoodfacts.org",
+            "url": "https://world.openfoodfacts.org/product/0072810286622/fish-sauce-ligo",
+            "text": "Ingredients, allergens, additives, 3 ingredients Anchovy-fish, salt, sugar. Palm oil content unknown Unrecognized ingredients: anchovy-fish ...",
+            "declares": [
+              "fish"
+            ],
+            "trusted": true
+          }
+        ],
+        "conflict": true,
+        "confirmed": true
+      },
+      "duration_ms": 0,
+      "forced_by": "a packaged ingredient matched the diner's request",
+      "note": "Sources disagree — that is grounds to refuse, never to average."
+    },
+    {
+      "n": 4,
+      "tool": "escalate",
+      "engine": "rule",
+      "title": "Refuse rather than guess",
+      "reasoning": "The blocking ingredient is what makes the dish that dish. The honest answer is no — and saying so is more useful than a modification the kitchen would have to refuse at the pass.",
+      "forced": true,
+      "args": {
+        "verdict": "do_not_serve"
+      },
+      "result": {
+        "verdict": "do_not_serve"
+      },
+      "duration_ms": 0,
+      "forced_by": "structural ingredient cannot be removed"
+    },
+    {
+      "n": 5,
+      "tool": "compose_reply",
+      "engine": "rule",
+      "title": "Fixed sentences state the verdict, in English",
+      "reasoning": "No model on this host. The reply is assembled from the facts, with hand-checked safety sentences where the diner's language has them and English otherwise.",
+      "forced": false,
+      "args": {
+        "verdict": "do_not_serve",
+        "language": "en"
+      },
+      "result": {
+        "verdict": "do_not_serve"
+      },
+      "duration_ms": 0
+    }
+  ],
+  "evidence": [
+    {
+      "source": "logifoodcoach.com",
+      "url": "https://logifoodcoach.com/database/en/fish-sauce/",
+      "text": "Allergens Contains: fish All foods without gluten All foods without milk All foods without eggs All foods without crustaceans",
+      "trusted": false
+    },
+    {
+      "source": "supermarketguru.com",
+      "url": "https://www.supermarketguru.com/articles/shopping-for-a-shellfish-allergy/",
+      "text": "There are eight common allergens: peanuts, tree nuts, soy, wheat, eggs, milk, fish and shellfish. Asian restaurants also use fish sauce in many ...",
+      "trusted": false
+    },
+    {
+      "source": "sangthai.co.uk",
+      "url": "http://www.sangthai.co.uk/allergen-advice/",
+      "text": "Most of these dishes contain gluten from oyster and soya sauces, dipping sauce for 2 Soya beans, as tofu or in soy sauce.",
+      "trusted": false
+    },
+    {
+      "source": "waiyeehong.com",
+      "url": "https://www.waiyeehong.com/food-ingredients/sauces-oils/soy-sauce-fish-sauce/ca-com-brand-fish-sauce?cPath=3_47&",
+      "text": "Allergy Advice: Contains Fish. Store in a cool dry place. Ingredients: Anchovy Extract (70%), Salt, Sugar, Flavour Enhancer (Monosodium Glutamate ...",
+      "trusted": false
+    },
+    {
+      "source": "world.openfoodfacts.org",
+      "url": "https://world.openfoodfacts.org/product/0072810286622/fish-sauce-ligo",
+      "text": "Ingredients, allergens, additives, 3 ingredients Anchovy-fish, salt, sugar. Palm oil content unknown Unrecognized ingredients: anchovy-fish ...",
+      "trusted": true
+    }
+  ],
+  "explanation": "We cannot serve this as requested. Fish sauce is the salt and the backbone of pad thai. Without it the dish has no seasoning base — it is not a garnish that can be left off. The fish sauce cannot be left out, so this dish is not possible for you. We can suggest something else from the menu.",
+  "explanation_en": "We cannot serve this as requested. Fish sauce is the salt and the backbone of pad thai. Without it the dish has no seasoning base — it is not a garnish that can be left off. The fish sauce cannot be left out, so this dish is not possible for you. We can suggest something else from the menu."
+}
