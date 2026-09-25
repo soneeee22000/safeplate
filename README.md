@@ -3,8 +3,8 @@
 **The model hears and speaks. The code decides.** An allergen agent for restaurant servers
 that refuses when it cannot be sure.
 
-The hosted demo runs in rules mode: fixed rules stand in for the model. Gemma 4 E2B runs on a
-laptop, and its recorded runs are replayed on the site with a badge saying so.
+The public demo replays real recorded runs, badged with the engine that produced each one:
+Gemma 4 E2B on a laptop, or rules mode, where fixed rules stand in for the model.
 
 [![License](https://img.shields.io/github/license/soneeee22000/safeplate?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square)](pyproject.toml)
@@ -12,7 +12,7 @@ laptop, and its recorded runs are replayed on the site with a badge saying so.
 [![Tests](https://img.shields.io/badge/tests-286%20passing-2e7d32?style=flat-square)](tests)
 [![Model](https://img.shields.io/badge/Gemma%204-E2B-1a73e8?style=flat-square)](safeplate/config.py)
 
-**[Live demo (rules mode — Gemma runs locally)](https://safeplate-ten.vercel.app/verify)** ·
+**[Interactive demo (recorded runs)](https://safeplate-ten.vercel.app/verify)** ·
 **[Code](https://github.com/soneeee22000/safeplate)**
 
 [![A pad thai case on /verify: five steps print, the SerpApi step lists its sources, and the ticket is stamped DO NOT SERVE](docs/media/verify-padthai-preview.gif)](https://safeplate-ten.vercel.app/verify)
@@ -181,16 +181,16 @@ When the kitchen has to answer, the run stops and waits for a person:
 The safety decisions are the same code in both. Only hearing and speaking change
 ([`safeplate/config.py:36`](safeplate/config.py#L36)).
 
-|         | Gemma mode (local)                                                                  | Rules mode (hosted demo)                                                                                 |
+|         | Gemma mode (local)                                                                  | Rules mode (no model)                                                                                    |
 | ------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Hears   | Gemma 4 E2B (~2B effective, 7.2 GB via Ollama): audio or text, the diner's language | Keyword matching over the same tables ([`intake_rules.py`](safeplate/intake_rules.py)), typed text only  |
 | Speaks  | Gemma writes the reply in the diner's language, behind `contradicts_refusal`        | Fixed English sentences; on a refusal or hold, hand-written Burmese, Urdu or Mandarin safety lines first |
 | Decides | Tables, forced lookup, forced kitchen question                                      | Same                                                                                                     |
-| Runs on | A laptop                                                                            | Render free tier (Docker), behind the Vercel site                                                        |
+| Runs on | A laptop                                                                            | Any machine with Python, no model needed                                                                 |
 | Start   | `SAFEPLATE_MODE=gemma uvicorn safeplate.api:app --port 8000`                        | `SAFEPLATE_MODE=rules uvicorn safeplate.api:app --port 8000`                                             |
 
-The site badges every run with the engine that produced it. When the hosted rules-mode agent
-is not reachable, it replays recorded runs, Gemma and rules alike, and says so
+The site badges every run with the engine that produced it. On the public site no
+agent is connected, so it replays recorded runs, Gemma and rules alike, and says so
 ([`web/src/lib/replays.ts`](web/src/lib/replays.ts)).
 
 ## Run it
@@ -231,7 +231,7 @@ NEXT_PUBLIC_ORCHESTRATOR_URL=http://127.0.0.1:8000 npm run build && npm start
 Browser origins other than `http://localhost:3000` and the deployed site must be added to
 `SAFEPLATE_CORS_ORIGINS` (comma-separated; `*` is refused).
 
-**Docker** (rules mode, as hosted):
+**Docker** (rules mode):
 
 ```bash
 docker build -t safeplate .
@@ -252,8 +252,10 @@ trace}`, `POST /api/case/{run_id}/answer` with `{risk: none|risk|unsure, note?}`
 
 ## Deploy
 
-Backend on Render from [`render.yaml`](render.yaml), frontend on Vercel. Steps, environment
-variables and the cold-start note are in [`docs/DEPLOY.md`](docs/DEPLOY.md).
+The public site is static: it replays recorded runs, so nothing runs on a server. To run the
+agent yourself, start the backend in either mode (above) and point the site at it with
+`NEXT_PUBLIC_ORCHESTRATOR_URL`. Optional self-hosting notes (Docker, Render) are in
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ## Limits
 
@@ -269,8 +271,8 @@ variables and the cold-start note are in [`docs/DEPLOY.md`](docs/DEPLOY.md).
   and Gemma's generated replies have not been reviewed by native speakers either.
 - **Small tables.** Eight cooked dishes and three sealed trays. Anything else is refused as
   unknown, by design.
-- **Render free tier sleeps.** The first request after idle can take a while; the site replays
-  recorded runs until the agent answers.
+- **The public demo is recorded.** The site replays real runs; it does not process what a
+  visitor types. Run it locally to use the agent live.
 - **Runs live in memory.** A restart loses open cases.
 
 ## If this were a product
@@ -296,7 +298,7 @@ The judged snapshot is the tag [`hackathon-submission`](https://github.com/sonee
 (commit `acb67d1`); the original submission repo is
 [RitaTY/gemma4](https://github.com/RitaTY/gemma4). Since the event I have relaunched it as a
 portfolio piece: fail-closed kitchen answers, the keyless rules mode, real SerpApi evidence, the
-Docker/Render backend and the rebuilt site. Every commit in this repo's history is mine
+Docker image and the rebuilt site. Every commit in this repo's history is mine
 (`git shortlog -sn`). The judged README and the event-day design docs assign build roles across
 the team; they are kept as a record of the day, not of who wrote this code.
 [`safeplate/config.py`](safeplate/config.py) started in an earlier project of mine and predates

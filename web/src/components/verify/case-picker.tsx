@@ -139,7 +139,7 @@ function FreeText({
       />
       {!liveMode && (
         <p className="text-confirm-lit mt-1 font-mono text-xs leading-5">
-          Live agent offline — typed text plays the closest recorded run.
+          Demo mode — typed text plays the closest recorded run.
         </p>
       )}
       <button

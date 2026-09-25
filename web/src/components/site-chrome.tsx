@@ -63,7 +63,7 @@ export function SiteHeader() {
             href="/verify"
             className="bg-paper text-console hover:bg-paper-shade flex min-h-11 items-center px-4 font-semibold transition-colors"
           >
-            Try the live agent
+            Try the demo
           </Link>
         </nav>
       </div>

@@ -27,9 +27,8 @@ export default function OrderPage() {
                 Experiment.
               </span>{" "}
               This diner-facing view departs from the main flow, where the
-              server holds the phone. It replays recorded Gemma runs, or uses
-              the live rules-mode agent when it is awake, and every ticket says
-              which.
+              server holds the phone. It replays recorded Gemma runs, and every
+              ticket is badged as a recording.
             </p>
             <Link
               href="/verify"

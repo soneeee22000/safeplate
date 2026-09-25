@@ -27,7 +27,7 @@ export function Hero() {
               href="/verify"
               className="bg-paper text-console hover:bg-paper-shade flex min-h-12 items-center justify-center px-6 font-semibold transition-colors"
             >
-              Try the live agent
+              Try the demo
             </Link>
             <a
               href={REPO_URL}
@@ -39,8 +39,9 @@ export function Hero() {
             </a>
           </div>
           <p className="text-muted-foreground mt-4 max-w-xl text-sm leading-6">
-            The live agent runs in rules mode: Gemma 4 E2B is a 7.2 GB model
-            that runs on a laptop, so its runs are shown as recordings.
+            The demo replays real recorded runs step by step. Gemma 4 E2B is a
+            7.2 GB model that runs on a laptop; clone the repo to run the agent
+            yourself.
           </p>
 
           <p className="text-paper/85 mt-8 flex items-center gap-2 text-sm">

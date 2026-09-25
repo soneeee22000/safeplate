@@ -133,10 +133,10 @@ function OfflineBanner({
 }) {
   const title = recordedWith
     ? recordedBadge(recordedWith)
-    : "Live agent offline — replaying recorded runs";
+    : "Interactive demo — recorded runs";
   const why =
     connection.reason === "unconfigured"
-      ? "This build has no live agent configured."
+      ? "Nothing runs on a server here: the agent runs on a laptop. Clone the repo to run it live."
       : connection.reason === "skipped"
         ? "You chose not to wait for the live agent."
         : connection.reason === "lost"

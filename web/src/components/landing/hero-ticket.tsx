@@ -69,7 +69,7 @@ export function HeroTicket() {
       </div>
       <div className="ticket-edge ticket-edge-bottom" aria-hidden="true" />
       <figcaption className="text-muted-foreground mt-3 text-center text-xs">
-        The hosted agent&apos;s rules mode, recorded. {TRACE.total_ms} ms end to
+        A recorded run in rules mode (no model). {TRACE.total_ms} ms end to
         end.
       </figcaption>
     </figure>

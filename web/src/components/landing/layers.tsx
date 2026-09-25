@@ -115,9 +115,9 @@ export function Layers() {
         </div>
 
         <p className="text-muted-foreground mt-8 max-w-2xl text-sm leading-6">
-          On the hosted demo the model lane is replaced by fixed rules and fixed
-          English sentences, because Gemma runs on a laptop. The code and human
-          lanes are the same.
+          In rules mode the model lane is replaced by fixed rules and fixed
+          English sentences, so the agent runs without Gemma. The code and human
+          lanes are the same either way.
         </p>
       </div>
     </section>

@@ -69,7 +69,7 @@ const BUSY_MESSAGE =
   "The live agent is holding its maximum of open cases. Try again shortly, or watch a recorded run.";
 const CONFLICT_NOTICE =
   "This case was already answered, possibly from another device. Showing that answer.";
-const CLOSEST_NOTICE = "Live agent offline — showing the closest recorded run.";
+const CLOSEST_NOTICE = "Demo mode — showing the closest recorded run.";
 
 /** Map a polled run onto the view, keeping the live source attached. */
 function liveView(state: RunState, mode: AgentMode, notice?: string): RunView {
