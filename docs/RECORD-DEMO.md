@@ -74,7 +74,7 @@ Turn the **microphone on** — narration is most of the value.
 Files land in:
 
 ```
-C:\Users\pyaes\Videos\Captures\
+%USERPROFILE%\Videos\Captures\
 ```
 
 > Game Bar records the **focused window**, not the whole desktop, and will not
@@ -109,12 +109,12 @@ Press `q` in that terminal to stop.
    > "Gemma is doing the listening here — audio straight into the model, any
    > language, transcription and intent in one call. While it works: this dish is
    > sold as vegan, and vegan is a claim about animal products, not allergens.
-   > The pesto is made with pignons de pin — pine nuts. They are in the
-   > ingredient list but **not** in the bold allergen text, so a diner checking
-   > the bold text will not see them."
+   > The pesto is made with pignons de pin — pine nuts. They are not an EU-14
+   > allergen, so the label is right not to bold them — and many tree-nut-allergic
+   > diners avoid them all the same. No rule settles that, so the agent asks."
 
-6. Land on the verdict: **DO NOT SERVE**, with the pine nuts named and the
-   workshop declaration quoted.
+6. Land on the verdict: **NEEDS CONFIRMATION**, with the pine nuts named as an
+   advisory and the workshop declaration quoted.
 7. Point at the **FORCED** badges: **"Those are the orchestrator, not the model.
    We measured Gemma failing to escalate on its own, so escalation is control
    flow."**

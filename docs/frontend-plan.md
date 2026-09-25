@@ -209,7 +209,7 @@ wrong call with four hours on the clock and no scaffold to inherit.
 **Who is building the agent loop while the frontend is built?**
 
 `safeplate-mvp-decision.md` §8 assigns the loop to Yan, SerpApi to Afaq, the frontend to Rita,
-and OCR + the EU-14 table + the eval set to Pyae. If Claude and Pyae now spend 90 minutes on
+and OCR + the EU-14 table + the eval set to Pyae. If Pyae now spends 90 minutes on
 the frontend, `read_label`, the allergen table and the eval set are unowned — and those are
 `match_allergens`, the single deterministic component the whole safety claim rests on.
 

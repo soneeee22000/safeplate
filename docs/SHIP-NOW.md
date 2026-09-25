@@ -116,8 +116,9 @@ URL, which replays. Two takes, ~90 seconds total:
 **Take 1 — the refusal that matters.** Tap _Gnocchis pesto vegan_. Type or say
 _"I have a tree nut allergy. Is the gnocchis pesto vegan safe for me?"_ Let it run.
 While Gemma is thinking (~25 s), talk over it — say that the label is real, it was
-today's lunch, and pine nuts are in the ingredients but not in the bold allergen
-text. Land on the verdict.
+today's lunch, and pine nuts are in the ingredients. They are not an EU-14 allergen,
+so the label is right not to bold them, and many tree-nut-allergic diners avoid them
+anyway. Land on the verdict: the agent holds the case at **needs confirmation**.
 
 **Take 2 — it asks a human.** Tap _Paëlla_. Ask about shellfish. The label is
 silent and the workshop line does not cover it, so the agent stops and asks the
@@ -151,9 +152,11 @@ curl -X POST http://127.0.0.1:8000/api/case -F "text=I have a tree nut allergy. 
 
 **Open with the vegan gnocchi.** It is the whole product in one sentence:
 
-> Symphony.fr's _Gnocchis pesto vegan_ contains pignons de pin — pine nuts. It is
-> in the ingredient list but **not** in the bold allergen text. A diner avoiding
-> nuts reads "vegan" and relaxes. This is the lunch we were served today.
+> Symphony.fr's _Gnocchis pesto vegan_ contains pignons de pin — pine nuts. They
+> are not an EU-14 allergen, so the label is compliant in not bolding them, and many
+> tree-nut-allergic diners avoid them all the same. A diner avoiding nuts reads
+> "vegan" and relaxes; the agent stops and asks instead. This is the lunch we were
+> served today.
 
 Then the three things that make it an agent and not a lookup:
 

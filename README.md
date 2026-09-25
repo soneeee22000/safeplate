@@ -12,8 +12,8 @@ A customer asks, in a language the server doesn't speak, whether a dish contains
 server has thirty seconds, a jar labelled in another language, and a legal obligation not to
 guess.
 
-SafePlate photographs the label, reads it on-device, maps ingredients to the EU's 14 declarable
-allergens, looks up the manufacturer's declaration when the label doesn't resolve, **asks the
+SafePlate checks the dish against its label — transcribed once, verbatim, into data — maps
+ingredients to the EU's 14 declarable allergens, looks up the manufacturer's declaration when the label doesn't resolve, **asks the
 kitchen the one thing no label can tell it**, and answers in the diner's language — or refuses,
 and says exactly why. Its most valuable output is often `DO NOT SERVE — I can't confirm`.
 
@@ -28,8 +28,8 @@ Built for the **Gemma 4 Hackathon | Paris**, Track 2 (Autonomous Agents), 42 Par
 
 > These pages **replay a recorded run**. They are genuinely interactive — the trace prints step
 > by step and the kitchen question waits for an answer you type — but Gemma is not executing
-> behind them. The model is 7.2 GB behind Ollama with a local Tesseract binary, so the agent
-> itself runs on a laptop, not on a web host. The interface says which mode it is in.
+> behind them. The model is 7.2 GB behind Ollama, so the agent itself runs on a laptop, not
+> on a web host. The interface says which mode it is in.
 
 ---
 
@@ -42,7 +42,7 @@ the food.**
 | ----------------------------------------------- | -------------------------------------------------- |
 | Hearing the diner — audio in, any language      | **Whether an ingredient is a declarable allergen** |
 | Turning that into `{dish, avoid, request_type}` | Whether it can be removed from the dish            |
-| Choosing which tool to call next                | `casein → milk`, `pignons de pin → nuts`           |
+| Choosing which tool to call next                | `casein → milk`, `pignons de pin → advisory`       |
 | Saying the answer in the diner's own language   | Whether the verdict may ever be "safe"             |
 
 A language model is never the last line of defence. The reasoning is learned; the safety call
@@ -129,21 +129,26 @@ refusal.
 
 ```mermaid
 flowchart TD
-    PHOTO["Label photo"] --> OCR["read_label<br/>Tesseract, 0.9s"]
-    OCR -->|confidence below 0.75| RESHOOT["FORCED: ask for<br/>a second photo"]
-    RESHOOT --> OCR
-    OCR -->|text| GEMMA["structure_ingredients<br/>Gemma 4 E2B"]
-    GEMMA --> MATCH["match_allergens<br/>EU-14 table, deterministic"]
-    MATCH -->|unresolved token| LOOKUP["FORCED: lookup_product<br/>SerpApi"]
-    MATCH -->|all resolved| ASK
-    LOOKUP -->|sources conflict| STOP
-    LOOKUP -->|declaration found| ASK["FORCED: ask_kitchen<br/>cross-contact, a human answers"]
-    ASK -->|shared equipment| STOP["escalate<br/>DO NOT SERVE"]
-    ASK -->|ruled out| CARD["verdict + evidence trace<br/>in the diner's language"]
+    HEAR["understand_request<br/>Gemma 4 E2B, or keyword rules"] -->|no dish, no allergen,<br/>or an allergen not recognised| HOLD
+    HEAR -->|Symphony tray| LABEL["read_label<br/>rule over the transcribed label"]
+    HEAR -->|table dish| ASSESS["assess_dish<br/>EU-14 table + dish roles, deterministic"]
+    LABEL -->|allergen on the label| STOP
+    LABEL -->|advisory, or workshop line covers it| HOLD["escalate<br/>NEEDS CONFIRMATION"]
+    LABEL -->|label and workshop line silent| ASK
+    ASSESS -->|packaged ingredient| LOOKUP["FORCED: lookup_product<br/>SerpApi"]
+    ASSESS -->|structural ingredient| STOP["escalate<br/>DO NOT SERVE"]
+    ASSESS -->|advisory ingredient| HOLD
+    ASSESS -->|adjustable or clean| ASK["FORCED: ask_kitchen<br/>cross-contact, a human answers"]
+    LOOKUP -->|sources conflict on an<br/>ingredient that stays| STOP
+    LOOKUP --> ASSESS
+    ASK -->|any risk| STOP
+    ASK -->|hedged or unclear| HOLD
+    ASK -->|a plain, unconditional no| CARD["verdict + evidence trace<br/>in the diner's language"]
 
     style STOP fill:#f6e2e0,stroke:#a02f28,color:#111
+    style HOLD fill:#f7efdc,stroke:#8a6412,color:#111
     style CARD fill:#e0efe6,stroke:#176b45,color:#111
-    style MATCH fill:#eef1f5,stroke:#2a4c99,color:#111
+    style ASSESS fill:#eef1f5,stroke:#2a4c99,color:#111
     style ASK fill:#e8e9f7,stroke:#1f3a93,color:#111
 ```
 
@@ -175,7 +180,6 @@ flowchart TB
 
     subgraph Device["On-device — nothing leaves the machine"]
         GEMMA["Gemma 4 E2B via Ollama<br/>/v1 chat · input_audio · temp 0"]
-        OCR["Tesseract<br/>eng + fra · 0.4s"]
         MENU["Symphony labels<br/>+ EU-14 table + synonyms<br/>DATA, not a prompt"]
     end
 
@@ -190,7 +194,6 @@ flowchart TB
     ORDER -->|audio or text| LOOP
     VERIFY -->|audio or text| LOOP
     LOOP --> GEMMA
-    LOOP --> OCR
     LOOP --> MENU
     LOOP -->|FORCED| SERP
     LOOP -->|FORCED · run blocks| CHEF
@@ -207,8 +210,8 @@ flowchart TB
     style GUARD fill:#f6e2e0,stroke:#a02f28,color:#111
 ```
 
-**Only `lookup_product` crosses the internet.** The model, the OCR and every safety decision
-stay on the machine — no diner's health information is sent anywhere.
+**Only `lookup_product` crosses the internet.** The model and every safety decision stay on
+the machine — no diner's health information is sent anywhere.
 
 ## A run, as a sequence
 
@@ -233,7 +236,7 @@ sequenceDiagram
     end
 
     L->>M: report(dish, avoid)
-    M-->>L: label_conflict — pignons de pin<br/>declared:false (not in bold)
+    M-->>L: advisory — pignons de pin<br/>not an EU-14 allergen, ask
 
     alt packaged ingredient
         Note over L: FORCED by the loop,<br/>not chosen by the model
@@ -254,7 +257,7 @@ sequenceDiagram
         Note over L: guardrail discards it,<br/>assembles from facts, translates
     end
 
-    L-->>D: DO NOT SERVE + the reason,<br/>in the diner's language
+    L-->>D: NEEDS CONFIRMATION + the reason,<br/>in the diner's language
 ```
 
 **Every `FORCED` note is this file's control flow, not the model's judgement.** That is the
@@ -304,7 +307,7 @@ flowchart LR
     D(["DINER<br/>receives, never operates"])
 
     U1["Open a case:<br/>allergen + language"]
-    U2["Photograph the label"]
+    U2["Pick the dish<br/>from the menu"]
     U3["Answer the agent's<br/>cross-contact question"]
     U4["Receive the verdict<br/>in their own language"]
 
@@ -403,9 +406,14 @@ better answer than a model that usually remembers.
 Latency: **24.0 s** first tool-calling turn (schemas in context, model cold), **7.3 s** warm,
 **0.90 s** OCR. A six-step run is roughly 60 s.
 
+These were measured during the event. OCR has since been taken out of the running system: the
+Symphony labels are transcribed verbatim into `safeplate/menu_symphony.py`, and `read_label` is
+a rule over that data. No photo is taken or read.
+
 ## Features
 
-- **On-device label reading** — Tesseract (`eng+fra`); no photo leaves the machine
+- **Labels as data** — each Symphony label transcribed verbatim, bold markings included, and
+  read by rule; no photo is taken or sent
 - **EU-14 allergen matching** — Regulation (EU) No 1169/2011, with synonym resolution
 - **Guaranteed escalation** — unresolved ingredients always trigger an external lookup
 - **The agent asks a human** — cross-contact is evidence no document contains, so it stops and asks the kitchen
@@ -418,42 +426,34 @@ Latency: **24.0 s** first tool-calling turn (schemas in context, model cold), **
 
 | Layer             | Choice                               | Why                                                 |
 | ----------------- | ------------------------------------ | --------------------------------------------------- |
-| Model             | Gemma 4 **E2B** via Ollama           | Runs offline on a laptop; native function calling   |
-| Model call        | Ollama HTTP `/api/chat` with `tools` | `think:false`, `temperature:0`                      |
-| OCR               | Tesseract (`eng+fra`)                | E2B vision fails on dense print; Tesseract is 0.9 s |
+| Model             | Gemma 4 **E2B** via Ollama           | Runs offline on a laptop; takes audio directly      |
+| Model call        | Ollama `/v1/chat/completions`        | `input_audio` for speech, `temperature` 0           |
 | Orchestrator      | FastAPI                              | Owns control flow and forced escalation             |
 | Allergen logic    | Plain Python table                   | Deterministic and auditable by design               |
 | External evidence | SerpApi (`engine=google`)            | Manufacturer declarations the label omits           |
 | Interface         | Next.js 16 · TypeScript · Tailwind 4 | Operator console + agent trace, deployed on Vercel  |
 
-> **`think: false` is load-bearing.** Gemma 4 E2B otherwise emits a chain-of-thought into
-> Ollama's separate `thinking` field — invisible output you still wait for, at roughly 3x the
-> latency. The Ollama Python client (0.4.7) has no `think` parameter, which is why
-> `safeplate/llm.py` calls the loopback HTTP API directly.
+> SafePlate calls the loopback HTTP API directly with the standard library
+> (`safeplate/speech.py`) rather than through a client package.
 
 ## Getting started
 
-**Prerequisites:** Python 3.10+, [Ollama](https://ollama.com), and
-[Tesseract OCR](https://github.com/tesseract-ocr/tesseract).
+**Prerequisites:** Python 3.10+ and [Ollama](https://ollama.com). `ffmpeg` on `PATH` is
+optional, for transcoding browser audio.
 
 ```bash
 git clone git@github.com:RitaTY/gemma4.git
 cd gemma4
 
 ollama pull gemma4:e2b        # 7.2 GB
-pip install -r requirements.txt
+pip install -r requirements.txt        # runtime
+pip install -r requirements-dev.txt    # tests and lint
+uvicorn safeplate.api:app --port 8000
 ```
 
-Tesseract's binary path and language data are set in `safeplate/config.py`; the `eng` and `fra`
-data ship in `tessdata/`, so no extra download is needed.
-
-```python
-from safeplate.ocr import DocumentReader
-from safeplate.llm import chat
-
-label_text = DocumentReader().read("label.jpg")
-reply = chat(system="Extract the ingredient list.", user=label_text)
-```
+No model on the host? `SAFEPLATE_MODE=rules` runs the same safety decisions with keyword intake
+and fixed sentences. `SAFEPLATE_CORS_ORIGINS` sets the browser origins allowed to call the API;
+see `.env.example`.
 
 Optional, for the external lookup only:
 
@@ -464,15 +464,14 @@ export SERPAPI_KEY=...
 ## Project structure
 
 ```
-safeplate/          config · llm (tuned Ollama client) · ocr (Tesseract reader)
-fixtures/           recorded runs — one refusal, one clearance. THE FROZEN CONTRACT.
+safeplate/          api · loop · allergens · dishes · menu_symphony · speech · voice · serp
+fixtures/           recorded runs — one held for confirmation, one clearance. THE FROZEN CONTRACT.
 web/                Next.js operator console and landing page
   src/lib/trace.ts        the same schema, typed
   src/lib/orchestrator.ts the FastAPI client + demo replay
 docs/
   safeplate-mvp-decision.md  scope, persona, rubric mapping — read this first
   safeplate-spec.md          tool contracts, gate results, sequence diagram
-tessdata/           Tesseract language data (eng, fra)
 ```
 
 **`fixtures/trace-refusal.json` is the contract everything agrees on.** The Python loop emits
@@ -520,7 +519,8 @@ Built at the Gemma 4 Hackathon, 42 Paris, by a team of four.
 ## Provenance
 
 `llm.py`, `ocr.py` and `config.py` were extracted from an earlier offline-document project by
-[@soneeee22000](https://github.com/soneeee22000) and predate the hackathon. Everything else was
+[@soneeee22000](https://github.com/soneeee22000) and predate the hackathon. `llm.py` and `ocr.py`
+have since been removed as unused. Everything else was
 built during the event. Disclosed per competition rules §4.3.
 
 ## Licence

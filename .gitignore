@@ -21,7 +21,6 @@ __pycache__/
 *.egg-info/
 
 # --- Large local assets ---
-# tessdata/ restored — OCR is core to SafePlate
 *.gguf
 *.bin
 *.safetensors
@@ -43,3 +42,6 @@ Thumbs.db
 stitch_ref/
 stitch_safeplate*.zip
 image.png
+
+# Private correspondence — never publish
+docs/luma-reply-email.md
